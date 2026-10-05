@@ -59,6 +59,8 @@ import { readFolderIcons } from '~/app/folder-icons'
 import { readBookmarks, type Bookmark } from '~/app/bookmarks'
 import { QuickOpen } from './QuickOpen'
 import { SearchPanel } from './SearchPanel'
+import { CommentPrompt } from './CommentPrompt'
+import { addNoteComment } from '~/app/note-comments'
 import { openTarget } from '~/editor/links'
 import { Cloud, CloudAlert, CloudOff, MessageSquareText, RefreshCw } from 'lucide-react'
 import { SyncPanel } from './SyncPanel'
@@ -116,6 +118,14 @@ export function App() {
   const [feedbackOpen, setFeedbackOpen] = useState(false)
   const [quickOpen, setQuickOpen] = useState(false)
   const [syncOpen, setSyncOpen] = useState(false)
+  const [commenting, setCommenting] = useState<{
+    baseId: string
+    path: string
+    title: string
+    selected: string
+    context: string | null
+    section: string
+  } | null>(null)
   const sync = useSync()
   // The sync starts with the app, when this device was set up for it.
   useEffect(() => {
@@ -131,6 +141,11 @@ export function App() {
   const [busy, setBusy] = useState<string | null>(null)
   const [notice, setNotice] = useState<string | null>(null)
   const [headings, setHeadings] = useState<Heading[]>([])
+  // The keyboard handler is bound once; it reads the headings of the moment.
+  const headingsRef = useRef<Heading[]>([])
+  useEffect(() => {
+    headingsRef.current = headings
+  }, [headings])
   const editor = useRef<EditorView | null>(null)
   /**
    * The pinned list and the way to change it, read from the file tree's menu.
@@ -945,6 +960,43 @@ export function App() {
           case 'searchVault':
             setSearchOpen((open) => !open)
             break
+          case 'commentSelection': {
+            const view = editor.current
+            const tab = latestTab.current
+            if (!view || !tab || isDraft(tab)) return
+            const { from, to } = view.state.selection.main
+            const selected = view.state.doc.sliceString(from, to).trim()
+            if (!selected) {
+              setNotice('Selecione o trecho que quer comentar.')
+              return
+            }
+            const doc = view.state.doc
+            const before = doc.sliceString(Math.max(0, from - 60), from).replace(/\s+/g, ' ')
+            const after = doc.sliceString(to, Math.min(doc.length, to + 60)).replace(/\s+/g, ' ')
+            const section = headingsRef.current
+              .filter((heading) => heading.from <= from)
+              .reduce<typeof headingsRef.current>((path, heading) => {
+                const kept = path.filter((h) => h.level < heading.level)
+                return [...kept, heading]
+              }, [])
+              .map((heading) => '#'.repeat(heading.level) + ' ' + heading.text)
+              .join(' › ')
+            setCommenting({
+              baseId: tab.baseId,
+              path: tab.path,
+              title: tab.name,
+              selected,
+              context:
+                (from > 60 ? '...' : '') +
+                before +
+                '«' +
+                selected.replace(/\s+/g, ' ') +
+                '»' +
+                after,
+              section,
+            })
+            break
+          }
           case 'print': {
             // The browser would otherwise print the interface itself.
             if (!activeId) return
@@ -1393,6 +1445,21 @@ export function App() {
               {settings.infoPanel && (
                 <InfoPanel
                   tab={activeTab}
+                  onFind={(text) => {
+                    const view = editor.current
+                    if (!view) return
+                    const wanted = text.replace(/\.\.\.$/, '')
+                    const at = view.state.doc.toString().indexOf(wanted)
+                    if (at < 0) {
+                      setNotice('Esse trecho não está mais na nota.')
+                      return
+                    }
+                    view.dispatch({
+                      selection: { anchor: at, head: at + wanted.length },
+                      scrollIntoView: true,
+                    })
+                    view.focus()
+                  }}
                   headings={headings}
                   index={state.index[activeTab.baseId]}
                   onGoTo={(position) => {
@@ -1485,6 +1552,20 @@ export function App() {
           bases={state.bases}
           activePath={activeTab ? { baseId: activeTab.baseId, path: activeTab.path } : null}
           onClose={() => setSyncOpen(false)}
+        />
+      )}
+
+      {commenting && (
+        <CommentPrompt
+          selected={commenting.selected}
+          onClose={() => setCommenting(null)}
+          onSave={(comment) => {
+            const { baseId, path, ...rest } = commenting
+            setCommenting(null)
+            void addNoteComment(baseId, path, { ...rest, comment }).catch((error: unknown) =>
+              setNotice(error instanceof Error ? error.message : String(error)),
+            )
+          }}
         />
       )}
 

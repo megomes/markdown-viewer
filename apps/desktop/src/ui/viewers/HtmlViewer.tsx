@@ -12,6 +12,13 @@ import { frameDocument, isFrameMessage } from '~/app/html-frame'
 import { readHtmlState, writeHtmlState } from '~/app/html-state'
 import { openTarget } from '~/editor/links'
 import { CodeViewer } from './CodeViewer'
+import { revisorCode } from '~/app/revisor'
+import {
+  buildReviewExport,
+  pendingItems,
+  REVIEW_KEY,
+  type ReviewState,
+} from '@markdown-viewer/core/review'
 
 interface Props {
   baseId: string
@@ -27,17 +34,33 @@ export function HtmlViewer({ baseId, path, name, report }: Props) {
   const [doc, setDoc] = useState<string | null>(null)
   const [mode, setMode] = useState<'page' | 'code'>('page')
   const [nonce, setNonce] = useState(0)
+  // What the page keeps, as it changes: the Revisor's session lives in here.
+  const storage = useRef<Record<string, string>>({})
+  const [review, setReview] = useState<ReviewState | null>(null)
+  const [copied, setCopied] = useState(false)
+
+  const readReviewFrom = (map: Record<string, string>) => {
+    try {
+      return map[REVIEW_KEY] ? (JSON.parse(map[REVIEW_KEY]) as ReviewState) : null
+    } catch {
+      return null
+    }
+  }
 
   useEffect(() => {
     let cancelled = false
     void (async () => {
       try {
-        const [{ text }, storage, baseHref] = await Promise.all([
+        const [{ text }, saved, baseHref, revisor] = await Promise.all([
           fileSystem().read(baseId, path),
           readHtmlState(baseId, path),
           folderUrl(baseId, path),
+          revisorCode(baseId),
         ])
-        if (!cancelled) setDoc(frameDocument(text, { baseHref, storage }))
+        if (cancelled) return
+        storage.current = saved
+        setReview(readReviewFrom(saved))
+        setDoc(frameDocument(text, { baseHref, storage: saved, revisor: revisor.code }))
       } catch (error) {
         if (!cancelled) report(error instanceof Error ? error.message : String(error))
       }
@@ -64,6 +87,8 @@ export function HtmlViewer({ baseId, path, name, report }: Props) {
       const message = event.data
       if (message.__mdv === 'storage') {
         latest = message.storage
+        storage.current = message.storage
+        setReview(readReviewFrom(message.storage))
         clearTimeout(timer)
         timer = setTimeout(flush, SAVE_DELAY)
         return
@@ -97,6 +122,8 @@ export function HtmlViewer({ baseId, path, name, report }: Props) {
     }
   }, [baseId, path, report])
 
+  const pending = pendingItems(review)
+
   return (
     <div className="viewer">
       <div className="viewer-bar">
@@ -109,6 +136,45 @@ export function HtmlViewer({ baseId, path, name, report }: Props) {
           </button>
         </div>
         <span className="viewer-name">{name}</span>
+        {mode === 'page' && (
+          <button
+            type="button"
+            className={'viewer-action' + (review?.active ? ' is-on' : '')}
+            title="Liga o Revisor Visual: Alt + clique num elemento para comentar"
+            onClick={() =>
+              frame.current?.contentWindow?.postMessage(
+                { __mdv: 'revisor', active: !review?.active },
+                '*',
+              )
+            }
+          >
+            {review?.active ? 'Revisando' : 'Revisar'}
+          </button>
+        )}
+        {pending.length > 0 && (
+          <button
+            type="button"
+            className="viewer-action"
+            title="Copia os pedidos no formato do Revisor, com o caminho do arquivo"
+            onClick={() => {
+              const text = buildReviewExport([
+                {
+                  filePath: fileSystem().absolutePath(baseId, path) ?? path,
+                  title: name,
+                  items: pending,
+                },
+              ])
+              void navigator.clipboard.writeText(text).then(() => {
+                setCopied(true)
+                setTimeout(() => setCopied(false), 1500)
+              })
+            }}
+          >
+            {copied
+              ? 'Copiado'
+              : `Copiar ${pending.length} ${pending.length === 1 ? 'pedido' : 'pedidos'}`}
+          </button>
+        )}
         <button type="button" className="viewer-action" onClick={() => setNonce((n) => n + 1)}>
           Recarregar
         </button>

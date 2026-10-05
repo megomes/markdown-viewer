@@ -299,3 +299,8 @@
 .base-card-field > span:first-child {
   color: var(--text-tertiary);
 }
+
+.viewer-action.is-on {
+  border-color: var(--accent);
+  color: var(--accent-text);
+}

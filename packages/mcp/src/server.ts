@@ -200,4 +200,42 @@ server.registerTool(
   },
 )
 
+server.registerTool(
+  'comments_list',
+  {
+    title: 'Pedidos de revisão pendentes',
+    description:
+      'Os comentários que o Matheus deixou nas páginas HTML (pelo Revisor Visual) e nas notas, ainda sem resposta. ' +
+      'Devolve a lista e o texto no formato do "Copiar tudo" do Revisor, com o caminho de cada arquivo: ' +
+      'ache cada trecho pela âncora, confirme pelo caminho e aplique o pedido. Depois marque com comment_applied.',
+    inputSchema: {
+      file: z.string().optional().describe('Só os de arquivos cujo caminho contém isto'),
+    },
+    annotations: { readOnlyHint: true },
+  },
+  async ({ file }) => json(await vault.comments(file)),
+)
+
+server.registerTool(
+  'comment_applied',
+  {
+    title: 'Marcar pedido como feito',
+    description:
+      'Marca um item de revisão como aplicado, ou como recusado com o motivo. A conferência (ficou ou não ficou) é do Matheus, no app.',
+    inputSchema: {
+      file: z.string().describe('Caminho do arquivo no vault, como veio em comments_list'),
+      item: z.union([z.string(), z.number()]).describe('O id ou o número do item'),
+      status: z.enum(['applied', 'declined']).optional().describe('applied (padrão) ou declined'),
+      note: z.string().optional().describe('Uma nota curta: o que mudou, ou por que não'),
+    },
+  },
+  async ({ file, item, status, note }) => {
+    try {
+      return json(await vault.markComment(file, item, status ?? 'applied', note))
+    } catch (error) {
+      return fail(error instanceof Error ? error.message : String(error))
+    }
+  },
+)
+
 await server.connect(new StdioServerTransport())

@@ -67,3 +67,16 @@ describe('texto e título de HTML', () => {
     expect(isFrameMessage({ type: 'x' })).toBe(false)
   })
 })
+
+describe('Revisor embutido', () => {
+  it('vem por último, antes do </body>, e não fecha a própria tag', () => {
+    const out = frameDocument('<html><head></head><body><p>a</p></body></html>', {
+      baseHref: null,
+      storage: {},
+      revisor: 'var x = "</script>"; window.__rv = {}',
+    })
+    expect(out.indexOf('window.__rv = {}')).toBeGreaterThan(out.indexOf('<p>a</p>'))
+    expect(out.indexOf('window.__rv = {}')).toBeLessThan(out.indexOf('</body>'))
+    expect(out.match(/<\/script>/g)).toHaveLength(2)
+  })
+})

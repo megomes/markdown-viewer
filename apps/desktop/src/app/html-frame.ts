@@ -19,6 +19,8 @@ export type FrameMessage =
 function shim(initial: Record<string, string>): string {
   // Kept as plain ES5-ish code: it runs inside whatever page this is.
   return `(function () {
+  // Tells an embedded Revisor Visual that this frame is the whole page.
+  window.__rvEmbedded = true;
   var data = ${JSON.stringify(initial).replace(/</g, '\\u003c')};
   function store(persist) {
     var map = persist ? data : {};
@@ -44,6 +46,12 @@ function shim(initial: Record<string, string>): string {
   }
   try { Object.defineProperty(window, 'localStorage', { value: store(true), configurable: true }); } catch (e) {}
   try { Object.defineProperty(window, 'sessionStorage', { value: store(false), configurable: true }); } catch (e) {}
+  // The app turns the Revisor on and off from its own toolbar.
+  window.addEventListener('message', function (event) {
+    var data = event.data;
+    if (event.source !== parent || !data || data.__mdv !== 'revisor') return;
+    if (window.__rv && window.__rv.setActive) window.__rv.setActive(!!data.active);
+  });
   document.addEventListener('click', function (event) {
     if (event.defaultPrevented || event.button !== 0) return;
     var a = event.target && event.target.closest ? event.target.closest('a[href]') : null;
@@ -62,6 +70,24 @@ function escapeAttribute(text: string): string {
 
 /** The page, with the base and the shim in front of everything else. */
 export function frameDocument(
+  html: string,
+  options: { baseHref: string | null; storage: Record<string, string>; revisor?: string },
+): string {
+  const withRevisor = options.revisor ? appendRevisor(html, options.revisor) : html
+  return inject(withRevisor, options)
+}
+
+/**
+ * The Revisor Visual goes in last, after everything the page has, as a content
+ * script would. `</script` inside its code is broken so it cannot close the tag.
+ */
+function appendRevisor(html: string, code: string): string {
+  const tag = '<script>' + code.replace(/<\/script/gi, '<\\/script') + '</script>'
+  const end = html.search(/<\/body\s*>/i)
+  return end < 0 ? html + tag : html.slice(0, end) + tag + html.slice(end)
+}
+
+function inject(
   html: string,
   options: { baseHref: string | null; storage: Record<string, string> },
 ): string {

@@ -22,6 +22,7 @@ export type ShortcutId =
   | 'feedback'
   | 'quickOpen'
   | 'searchVault'
+  | 'commentSelection'
   | 'print'
   | 'zoomIn'
   | 'zoomOut'
@@ -57,6 +58,13 @@ export const SHORTCUTS: Shortcut[] = [
   { id: 'feedback', label: 'Feedback do app', key: 'b', mod: true, shift: true },
   { id: 'quickOpen', label: 'Abrir rápido', key: 't', mod: true },
   { id: 'searchVault', label: 'Buscar no vault', key: 'f', mod: true, shift: true },
+  {
+    id: 'commentSelection',
+    label: 'Comentar o trecho selecionado',
+    key: 'm',
+    mod: true,
+    shift: true,
+  },
   { id: 'print', label: 'Imprimir', key: 'p', mod: true },
   { id: 'zoomIn', label: 'Aumentar a interface', key: '=', mod: true },
   { id: 'zoomOut', label: 'Diminuir a interface', key: '-', mod: true },

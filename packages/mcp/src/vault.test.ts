@@ -81,6 +81,50 @@ describe('Vault', () => {
     await expect(vault.rename('Notas/Painel.md', 'Files/foto.png')).rejects.toThrow(/Já existe/)
   })
 
+  it('lista os pedidos de revisão e marca como feito', async () => {
+    const review = {
+      items: [
+        {
+          id: 'a1',
+          n: 1,
+          kind: 'título',
+          tagSig: '<h1>',
+          anchor: 'Treino',
+          comment: 'mudar cor',
+          path: 'h1',
+        },
+        { id: 'a2', n: 2, kind: 'botão', tagSig: '<button>', anchor: '+1', comment: '' },
+      ],
+      nextN: 3,
+    }
+    put(
+      '.markdown-viewer/state/Trackers/Treino.html.json',
+      JSON.stringify({
+        version: 1,
+        localStorage: { rv_state: JSON.stringify(review), feitas: '3' },
+      }),
+    )
+    const listed = await vault.comments()
+    expect(listed.pending).toEqual([
+      {
+        file: 'Trackers/Treino.html',
+        items: [{ id: 'a1', n: 1, anchor: 'Treino', request: 'mudar cor' }],
+      },
+    ])
+    expect(listed.export).toContain('Arquivo: ' + join(root, 'Trackers', 'Treino.html'))
+    expect(listed.export).toContain('Pedido: mudar cor')
+    await vault.markComment('Trackers/Treino.html', 1, 'applied', 'cor trocada')
+    expect((await vault.comments()).pending).toEqual([])
+    const saved = JSON.parse(
+      readFileSync(join(root, '.markdown-viewer', 'state', 'Trackers', 'Treino.html.json'), 'utf8'),
+    )
+    expect(saved.localStorage.feitas).toBe('3')
+    expect(JSON.parse(saved.localStorage.rv_state).items[0].claude).toMatchObject({
+      status: 'applied',
+      note: 'cor trocada',
+    })
+  })
+
   it('não sai do vault', async () => {
     await expect(vault.text('../fora.md')).rejects.toThrow(/fora do vault/)
   })

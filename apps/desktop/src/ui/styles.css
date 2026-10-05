@@ -3210,3 +3210,106 @@ html[data-window='dock'] .chip {
   text-decoration: underline;
   cursor: pointer;
 }
+
+/* ------------------------------------------------------ note comments */
+
+.comment-prompt {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  width: min(520px, calc(100vw - 32px));
+  padding: 14px 16px;
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-lg);
+  background: var(--surface-1);
+  box-shadow: 0 20px 60px rgb(0 0 0 / 0.35);
+}
+
+.comment-quote {
+  margin: 0;
+  color: var(--text-secondary);
+  font-size: 13px;
+  font-style: italic;
+}
+
+.comment-prompt textarea {
+  padding: 8px 10px;
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-md);
+  outline: 0;
+  background: var(--bg-content);
+  color: var(--text-primary);
+  font: inherit;
+  font-size: 13.5px;
+  resize: vertical;
+}
+
+.comment-prompt textarea:focus {
+  border-color: var(--accent);
+}
+
+.comment-actions {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  color: var(--text-tertiary);
+  font-size: 12px;
+}
+
+.note-comments ul {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.note-comments li {
+  padding: 8px 10px;
+  border-left: 3px solid var(--accent-muted);
+  border-radius: var(--radius-sm);
+  background: var(--surface-1);
+  font-size: 12.5px;
+}
+
+.note-comments li.is-applied {
+  border-left-color: var(--tone-green);
+}
+
+.note-comments li.is-declined {
+  border-left-color: var(--text-tertiary);
+}
+
+.note-comments li p {
+  margin: 4px 0 0;
+  color: var(--text-secondary);
+}
+
+.note-comment-anchor,
+.note-comment-remove,
+.note-comments-copy {
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--text-primary);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.note-comment-claude {
+  color: var(--tone-green) !important;
+}
+
+.note-comment-remove,
+.note-comments-copy {
+  margin-top: 4px;
+  color: var(--text-tertiary);
+  font-size: 11.5px;
+  text-decoration: underline;
+}
+
+.note-comments-copy {
+  margin: 0 0 0 8px;
+}

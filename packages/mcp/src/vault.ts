@@ -19,6 +19,13 @@ import { parseBase, runView, showValue } from '@markdown-viewer/core/bases'
 import type { Entry } from '@markdown-viewer/core/fs'
 import { htmlText } from '@markdown-viewer/core/html'
 import { rewriteLinks } from '@markdown-viewer/core/rewrite'
+import {
+  buildReviewExport,
+  pendingItems,
+  readReview,
+  sourceOfState,
+  writeReview,
+} from '@markdown-viewer/core/review'
 import { search, type SearchDoc } from '@markdown-viewer/core/search'
 import { decode, encode } from '@markdown-viewer/core/text'
 
@@ -228,6 +235,76 @@ export class Vault {
         })),
       })),
     }
+  }
+
+  /** Every page and note with review comments, from `.markdown-viewer/state`. */
+  private async reviewFiles(): Promise<{ statePath: string; source: string }[]> {
+    const out: { statePath: string; source: string }[] = []
+    const walk = async (dir: string) => {
+      let entries
+      try {
+        entries = await readdir(this.full(dir), { withFileTypes: true })
+      } catch {
+        return
+      }
+      for (const entry of entries) {
+        const path = dir + '/' + entry.name
+        if (entry.isDirectory()) await walk(path)
+        else {
+          const source = sourceOfState(path)
+          if (source) out.push({ statePath: path, source })
+        }
+      }
+    }
+    await walk('.markdown-viewer/state')
+    return out
+  }
+
+  /** Pending review items, and the Revisor's export text for them. */
+  async comments(filter?: string) {
+    const pages: {
+      filePath: string
+      title: string
+      source: string
+      items: ReturnType<typeof pendingItems>
+    }[] = []
+    for (const { statePath, source } of await this.reviewFiles()) {
+      if (filter && !source.toLowerCase().includes(filter.toLowerCase())) continue
+      const review = readReview(await readFile(this.full(statePath), 'utf8').catch(() => ''))
+      const items = pendingItems(review)
+      if (!items.length) continue
+      const title = source.slice(source.lastIndexOf('/') + 1)
+      pages.push({ filePath: this.full(source), title, source, items })
+    }
+    return {
+      pending: pages.map((page) => ({
+        file: page.source,
+        items: page.items.map((item) => ({
+          id: item.id,
+          n: item.n,
+          anchor: item.anchor,
+          request: item.comment,
+        })),
+      })),
+      export: buildReviewExport(pages),
+    }
+  }
+
+  /** Marks one item as done, or declined with a reason, for the person to check. */
+  async markComment(
+    file: string,
+    item: string | number,
+    status: 'applied' | 'declined',
+    note?: string,
+  ) {
+    const statePath = `.markdown-viewer/state/${file}.json`
+    const text = await readFile(this.full(statePath), 'utf8')
+    const review = readReview(text)
+    const found = review?.items.find((i) => i.id === item || i.n === Number(item))
+    if (!review || !found) throw new Error(`Item ${item} não encontrado em ${file}.`)
+    found.claude = { status, ...(note ? { note } : {}), at: new Date().toISOString() }
+    await writeFile(this.full(statePath), writeReview(text, review))
+    return { file, item: found.n, status }
   }
 
   /**

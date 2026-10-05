@@ -4,8 +4,9 @@ import type { Tab } from '~/app/store'
 import type { Heading } from '~/editor/outline'
 import { entryId } from '@markdown-viewer/core/fs'
 import { MarkdownIcon } from './icons'
+import { NoteComments } from './NoteComments'
 
-type Page = 'sumario' | 'links'
+type Page = 'sumario' | 'links' | 'comentarios'
 
 interface Props {
   tab: Tab
@@ -13,6 +14,8 @@ interface Props {
   index: BaseIndex | undefined
   onGoTo: (position: number) => void
   onOpenPath: (baseId: string, path: string) => void
+  /** Finds and selects a quoted passage in the open note. */
+  onFind: (text: string) => void
 }
 
 export const InfoPanel = memo(function InfoPanel({
@@ -21,6 +24,7 @@ export const InfoPanel = memo(function InfoPanel({
   index,
   onGoTo,
   onOpenPath,
+  onFind,
 }: Props) {
   const [page, setPage] = useState<Page>('sumario')
 
@@ -45,11 +49,22 @@ export const InfoPanel = memo(function InfoPanel({
         >
           Links
         </button>
+        <button
+          type="button"
+          role="tab"
+          aria-selected={page === 'comentarios'}
+          className={'info-tab' + (page === 'comentarios' ? ' is-active' : '')}
+          onClick={() => setPage('comentarios')}
+        >
+          Comentários
+        </button>
       </div>
 
       <div className="info-body">
         {page === 'sumario' ? (
           <Outline headings={headings} onGoTo={onGoTo} />
+        ) : page === 'comentarios' ? (
+          <NoteComments baseId={tab.baseId} path={tab.path} name={tab.name} onFind={onFind} />
         ) : (
           <Links tab={tab} index={index} onOpenPath={onOpenPath} />
         )}
