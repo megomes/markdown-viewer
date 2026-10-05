@@ -3336,3 +3336,15 @@ html[data-window='dock'] .chip {
 .sync-folder-path.is-empty {
   color: var(--text-tertiary);
 }
+
+/* Dragging in the tree: where it will land. */
+.tree-row.is-drop-target {
+  outline: 1px dashed var(--accent);
+  outline-offset: -1px;
+  background: color-mix(in srgb, var(--accent) 12%, transparent);
+}
+
+.tree-section.is-drop-target {
+  border-radius: var(--radius-md);
+  background: color-mix(in srgb, var(--accent) 6%, transparent);
+}

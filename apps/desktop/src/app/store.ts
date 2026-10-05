@@ -1055,6 +1055,40 @@ export function useWorkspace() {
     afterMove.current = updateLinksAfterMove
   }, [updateLinksAfterMove])
 
+  /**
+   * Moves a file or folder into another folder of the same base, by dragging in
+   * the tree. Refuses to overwrite, and to put a folder inside itself. Links to
+   * what moved are rewritten, as with a rename.
+   */
+  const moveEntry = useCallback(
+    async (entry: Entry, folder: string) => {
+      const from = parentPath(entry.path)
+      if (folder === from) return
+      if (
+        entry.kind === 'directory' &&
+        (folder === entry.path || folder.startsWith(entry.path + '/'))
+      ) {
+        report(new Error('Uma pasta não pode ir para dentro dela mesma.'))
+        return
+      }
+      const target = joinPath(folder, entry.name)
+      try {
+        if (await fileSystem().stat(entry.baseId, target)) {
+          report(new Error(`Já existe ${entry.name} em ${folder || 'a raiz'}.`))
+          return
+        }
+        await fileSystem().move(entry.baseId, entry.path, target)
+        dispatch({ type: 'entry/moved', baseId: entry.baseId, from: entry.path, to: target })
+        await loadChildren(entry.baseId, from)
+        await loadChildren(entry.baseId, folder)
+        await updateLinksAfterMove(entry.baseId, entry.path, target)
+      } catch (error) {
+        report(error)
+      }
+    },
+    [loadChildren, report, updateLinksAfterMove],
+  )
+
   const forgetRecents = useCallback(
     () => dispatch({ type: 'recents/set', recents: clearRecents() }),
     [],
@@ -1181,6 +1215,7 @@ export function useWorkspace() {
       restoreSession,
       createEntry,
       renameEntry,
+      moveEntry,
       renameDocument,
       duplicateEntry,
       trashEntry,
@@ -1221,6 +1256,7 @@ export function useWorkspace() {
       duplicateEntry,
       renameDocument,
       renameEntry,
+      moveEntry,
       revealEntry,
       trashEntry,
       watchBases,

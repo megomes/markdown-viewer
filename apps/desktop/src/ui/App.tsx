@@ -46,7 +46,7 @@ import { ContextMenu, type MenuItem } from './ContextMenu'
 import { Dialog, type DialogChoice } from './Dialog'
 import { SHORTCUTS, keyCap, matchShortcut, onApple } from './shortcuts'
 import { installAppMenu, menuPlan, type CommandId } from './app-menu'
-import { FileTree, type TreeData, type TreeHandlers } from './FileTree'
+import { canDrop, draggedEntry, FileTree, type TreeData, type TreeHandlers } from './FileTree'
 import { InfoPanel } from './InfoPanel'
 import { MeasureGuides } from './MeasureGuides'
 import { centreOf, changeTheme } from './theme-transition'
@@ -278,6 +278,7 @@ export function App() {
   const tree: TreeHandlers = useMemo(
     () => ({
       onToggleFolder: toggleFolder,
+      onMove: (entry: Entry, folder: string) => void actions.moveEntry(entry, folder),
       onOpenFile: openFile,
       onContextMenu: (entry, x, y) => setMenu({ items: menuItems(entry), x, y }),
       onStartRename: (entry) => setRenamingId(entry.id),
@@ -1219,7 +1220,28 @@ export function App() {
 
         <nav className="tree-scroll" role="tree" aria-label="Arquivos">
           {state.bases.map((base) => (
-            <section className="tree-section" key={base.id}>
+            <section
+              className="tree-section"
+              key={base.id}
+              // Dropped on the empty space of a base: to its root.
+              onDragOver={(event) => {
+                if (!canDrop(draggedEntry(), base.id, '')) return
+                event.preventDefault()
+                event.dataTransfer.dropEffect = 'move'
+                event.currentTarget.classList.add('is-drop-target')
+              }}
+              onDragLeave={(event) => {
+                if (!event.currentTarget.contains(event.relatedTarget as Node)) {
+                  event.currentTarget.classList.remove('is-drop-target')
+                }
+              }}
+              onDrop={(event) => {
+                event.preventDefault()
+                event.currentTarget.classList.remove('is-drop-target')
+                const moving = draggedEntry()
+                if (canDrop(moving, base.id, '')) void actions.moveEntry(moving, '')
+              }}
+            >
               <div className="section-head">
                 <h2 className="section-label" title={base.label}>
                   {base.name}

@@ -26,6 +26,30 @@ export interface TreeHandlers {
   onRename: (entry: Entry, name: string) => void
   onCancelRename: () => void
   onTrash: (entry: Entry) => void
+  /** Moves an entry into a folder of the same base ('' is the root). */
+  onMove: (entry: Entry, folder: string) => void
+}
+
+/**
+ * What is being dragged, kept here and not in the drag data: the data is only
+ * readable on drop, and the rows need to know during the drag whether they can
+ * take it.
+ */
+let dragged: Entry | null = null
+
+export function draggedEntry(): Entry | null {
+  return dragged
+}
+
+/** Whether `entry` may be dropped into `folder` of `baseId`. */
+export function canDrop(entry: Entry | null, baseId: string, folder: string): entry is Entry {
+  if (!entry || entry.baseId !== baseId) return false
+  const from = entry.path.includes('/') ? entry.path.slice(0, entry.path.lastIndexOf('/')) : ''
+  if (folder === from) return false
+  return !(
+    entry.kind === 'directory' &&
+    (folder === entry.path || folder.startsWith(entry.path + '/'))
+  )
 }
 
 interface Props extends TreeHandlers {
@@ -74,6 +98,13 @@ export const FileTree = memo(function FileTree({
       {entries.map((entry) => {
         const open = data.expanded[entry.id] === true
         const readable = entry.kind === 'directory' || viewerOf(entry.name) !== null
+        // A file row takes a drop into its own folder; a folder row, into itself.
+        const dropFolder =
+          entry.kind === 'directory'
+            ? entry.path
+            : entry.path.includes('/')
+              ? entry.path.slice(0, entry.path.lastIndexOf('/'))
+              : ''
         const openEntry = (preview: boolean) => {
           if (entry.kind === 'directory') on.onToggleFolder(entry)
           else if (readable) on.onOpenFile(entry, preview)
@@ -94,6 +125,45 @@ export const FileTree = memo(function FileTree({
                 role="treeitem"
                 aria-expanded={entry.kind === 'directory' ? open : undefined}
                 title={entry.name}
+                draggable
+                onDragStart={(event) => {
+                  dragged = entry
+                  event.dataTransfer.effectAllowed = 'move'
+                  event.dataTransfer.setData('text/plain', entry.path)
+                }}
+                onDragEnd={() => {
+                  dragged = null
+                  for (const el of document.querySelectorAll('.is-drop-target'))
+                    el.classList.remove('is-drop-target')
+                }}
+                onDragOver={(event) => {
+                  if (!canDrop(dragged, entry.baseId, dropFolder)) return
+                  event.preventDefault()
+                  event.stopPropagation()
+                  event.dataTransfer.dropEffect = 'move'
+                  const row = event.currentTarget
+                  if (!row.classList.contains('is-drop-target')) {
+                    for (const el of document.querySelectorAll('.is-drop-target'))
+                      el.classList.remove('is-drop-target')
+                    row.classList.add('is-drop-target')
+                    // Holding over a closed folder opens it, to drop deeper.
+                    if (entry.kind === 'directory' && !open) {
+                      window.setTimeout(() => {
+                        if (row.classList.contains('is-drop-target') && dragged)
+                          on.onToggleFolder(entry)
+                      }, 700)
+                    }
+                  }
+                }}
+                onDragLeave={(event) => event.currentTarget.classList.remove('is-drop-target')}
+                onDrop={(event) => {
+                  event.preventDefault()
+                  event.stopPropagation()
+                  event.currentTarget.classList.remove('is-drop-target')
+                  const moving = dragged
+                  dragged = null
+                  if (canDrop(moving, entry.baseId, dropFolder)) on.onMove(moving, dropFolder)
+                }}
                 onClick={() => openEntry(true)}
                 onDoubleClick={() => entry.kind === 'file' && openEntry(false)}
                 onContextMenu={(event) => {
