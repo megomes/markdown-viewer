@@ -8,7 +8,7 @@ abertura o app pergunta se há versão nova, e se houver, oferece instalar.
 Cada release publica, além dos instaladores, um arquivo `latest.json` que diz
 qual é a versão mais recente e onde está o pacote de cada sistema. O app
 consulta esse arquivo em
-`https://github.com/matheuservilha/markdown-viewer/releases/latest/download/latest.json`.
+`https://github.com/megomes/markdown-viewer/releases/latest/download/latest.json`.
 
 Cada pacote vai assinado. O app carrega a chave pública e recusa qualquer
 pacote assinado com outra chave, e é isso que impede que alguém no meio do
