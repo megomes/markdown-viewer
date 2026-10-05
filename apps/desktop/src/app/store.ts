@@ -122,13 +122,14 @@ export interface State {
 
 type Action =
   | { type: 'base/added'; base: Base }
+  | { type: 'base/removed'; id: string }
   | { type: 'children/loaded'; id: string; entries: Entry[] }
   | { type: 'folder/toggled'; id: string }
   | { type: 'tab/opened'; tab: Tab }
   | { type: 'tab/pinned'; id: string }
   | { type: 'tab/renamed'; id: string; name: string; named?: boolean }
   | { type: 'tab/closed'; id: string }
-  | { type: 'tab/activated'; id: string }
+  | { type: 'tab/activated'; id: string | null }
   | { type: 'doc/loaded'; id: string; doc: Doc }
   | { type: 'doc/edited'; id: string; text: string }
   | { type: 'doc/synced'; id: string; text: string }
@@ -226,7 +227,16 @@ function reducer(state: State, action: Action): State {
       const tabs = state.tabs.filter((tab) => tab.id !== action.id)
       const docs = { ...state.docs }
       delete docs[action.id]
-      const fallback = tabs[Math.min(index, tabs.length - 1)]?.id ?? null
+      // The next tab is a neighbour from the same place (the same folder, the
+      // loose files, the drafts), so closing a tab never jumps to another space.
+      const closing = state.tabs[index]
+      const group = (tab: Tab) =>
+        tab.path === '' && !isDraft(tab) ? 'loose' : isDraft(tab) ? 'draft' : tab.baseId
+      const kin = closing ? tabs.filter((tab) => group(tab) === group(closing)) : tabs
+      const before = closing
+        ? state.tabs.slice(0, index).filter((tab) => kin.includes(tab)).length
+        : index
+      const fallback = kin[Math.min(before, kin.length - 1)]?.id ?? null
       return {
         ...state,
         tabs,
@@ -237,6 +247,23 @@ function reducer(state: State, action: Action): State {
 
     case 'tab/activated':
       return { ...state, activeId: action.id }
+
+    // A folder closed from its space: its tabs go with it. The files stay on disk.
+    case 'base/removed': {
+      const tabs = state.tabs.filter((tab) => tab.baseId !== action.id)
+      const docs = { ...state.docs }
+      for (const tab of state.tabs) if (tab.baseId === action.id) delete docs[tab.id]
+      const index = { ...state.index }
+      delete index[action.id]
+      return {
+        ...state,
+        bases: state.bases.filter((base) => base.id !== action.id),
+        tabs,
+        docs,
+        index,
+        activeId: tabs.some((tab) => tab.id === state.activeId) ? state.activeId : null,
+      }
+    }
 
     case 'doc/loaded':
       return { ...state, docs: { ...state.docs, [action.id]: action.doc } }
@@ -449,15 +476,17 @@ export function useWorkspace() {
     [report],
   )
 
-  const openBase = useCallback(async () => {
+  const openBase = useCallback(async (): Promise<Base | null> => {
     try {
       const base = await fileSystem().openBase()
-      if (!base) return
+      if (!base) return null
       dispatch({ type: 'recents/set', recents: rememberBase(base) })
       dispatch({ type: 'base/added', base })
       await loadChildren(base.id, '')
+      return base
     } catch (error) {
       report(error)
+      return null
     }
   }, [loadChildren, report])
 
@@ -920,6 +949,22 @@ export function useWorkspace() {
     [loadChildren, report],
   )
 
+  /** Closes a folder: refused while one of its tabs has unsaved changes. */
+  const closeBase = useCallback(
+    (baseId: string): boolean => {
+      const dirty = latest.current.tabs.some(
+        (tab) => tab.baseId === baseId && latest.current.docs[tab.id]?.dirty,
+      )
+      if (dirty) {
+        report(new Error('Salve ou descarte as alterações das abas dessa pasta antes de fechá-la.'))
+        return false
+      }
+      dispatch({ type: 'base/removed', id: baseId })
+      return true
+    },
+    [report],
+  )
+
   const openRecentBase = useCallback(
     async (base: RecentBase) => {
       try {
@@ -1208,6 +1253,7 @@ export function useWorkspace() {
       openLooseFile,
       openRecentFile,
       openRecentBase,
+      closeBase,
       newNote,
       forgetRecents,
       forgetRecentFile,
@@ -1237,7 +1283,7 @@ export function useWorkspace() {
       savedElsewhere: (id: string, text: string, version: FileVersion) =>
         dispatch({ type: 'doc/saved-elsewhere', id, text, version }),
       closeTab: (id: string) => dispatch({ type: 'tab/closed', id }),
-      activateTab: (id: string) => dispatch({ type: 'tab/activated', id }),
+      activateTab: (id: string | null) => dispatch({ type: 'tab/activated', id }),
       edit: (id: string, text: string) => dispatch({ type: 'doc/edited', id, text }),
       setFilter: (value: string) => dispatch({ type: 'filter/set', value }),
       dismissError: () => dispatch({ type: 'error/set', message: null }),
@@ -1264,6 +1310,7 @@ export function useWorkspace() {
       openFile,
       openLooseFile,
       openRecentBase,
+      closeBase,
       openRecentFile,
       reload,
       restoreSession,

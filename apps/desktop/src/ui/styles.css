@@ -3348,3 +3348,172 @@ html[data-window='dock'] .chip {
   border-radius: var(--radius-md);
   background: color-mix(in srgb, var(--accent) 6%, transparent);
 }
+
+/* ---------------------------------------------------------------- spaces */
+
+.spaces {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  margin-bottom: var(--space-2);
+}
+
+.space {
+  display: inline-flex;
+  gap: 5px;
+  align-items: center;
+  max-width: 100%;
+  height: 1.6rem;
+  padding: 0 8px;
+  border: 1px solid var(--border-default);
+  border-radius: 999px;
+  background: var(--surface-1);
+  color: var(--text-secondary);
+  font-size: 12px;
+  cursor: pointer;
+  user-select: none;
+}
+
+.space:hover {
+  border-color: var(--border-emphasis);
+  color: var(--text-primary);
+}
+
+.space.is-active {
+  border-color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 12%, var(--surface-1));
+  color: var(--text-primary);
+}
+
+.space-name {
+  overflow: hidden;
+  max-width: 11rem;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.space-sync {
+  color: var(--tone-green);
+}
+
+.space-sync.is-syncing {
+  color: var(--tone-blue);
+  animation: sync-spin 1.2s linear infinite;
+}
+
+.space-sync.is-error {
+  color: var(--tone-red);
+}
+
+.space-sync.is-off,
+.space-sync.is-offline {
+  color: var(--text-tertiary);
+}
+
+.space-count {
+  min-width: 1.1rem;
+  padding: 0 4px;
+  border-radius: 999px;
+  background: var(--surface-3);
+  font-size: 10.5px;
+  text-align: center;
+}
+
+.space-close {
+  display: inline-flex;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--text-tertiary);
+  cursor: pointer;
+}
+
+.space-close:hover {
+  color: var(--text-primary);
+}
+
+/* The "Arquivos" space: loose files and where they live. */
+.files-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 4px 0;
+}
+
+.files-note {
+  margin: 0;
+  padding: 0 0.5rem;
+  color: var(--text-tertiary);
+  font-size: 12px;
+}
+
+.files-panel ul {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.files-panel li {
+  display: flex;
+  align-items: center;
+  border-radius: var(--radius-sm);
+}
+
+.files-panel li.is-active,
+.files-panel li:hover {
+  background: var(--surface-hover);
+}
+
+.files-open {
+  display: flex;
+  flex: 1;
+  gap: 8px;
+  align-items: flex-start;
+  min-width: 0;
+  padding: 5px 8px;
+  border: 0;
+  background: none;
+  color: var(--text-secondary);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.files-open span {
+  display: flex;
+  overflow: hidden;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.files-open b {
+  overflow: hidden;
+  color: var(--text-primary);
+  font-weight: 500;
+  font-size: 13px;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.files-open small {
+  overflow: hidden;
+  color: var(--text-tertiary);
+  font-size: 11px;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.files-move {
+  padding: 6px;
+  border: 0;
+  background: none;
+  color: var(--text-tertiary);
+  cursor: pointer;
+}
+
+.files-move:hover {
+  color: var(--accent-text);
+}

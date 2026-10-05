@@ -64,6 +64,9 @@ import { addNoteComment } from '~/app/note-comments'
 import { openTarget } from '~/editor/links'
 import { Cloud, CloudAlert, CloudOff, MessageSquareText, RefreshCw } from 'lucide-react'
 import { SyncPanel } from './SyncPanel'
+import { SpaceStrip } from './SpaceStrip'
+import { FilesPanel } from './FilesPanel'
+import { setVault, spaceOfTab, spacesOf, useVault, type Space, type SpaceId } from '~/app/spaces'
 import { startSync, useSync } from '~/app/sync'
 import { SidebarResizer } from './SidebarResizer'
 import { canPrint, printHtml } from './print'
@@ -370,6 +373,76 @@ export function App() {
   }, [actions])
 
   const activeTab = state.tabs.find((tab) => tab.id === state.activeId) ?? null
+
+  // ---- spaces: the vault, other folders, and the files from outside ----
+  const vault = useVault()
+  // With no vault chosen yet, the sync's folder is it, or the only folder open.
+  useEffect(() => {
+    if (vault) return
+    if (sync.config?.folder) setVault(sync.config.folder)
+    else if (state.bases.length === 1) setVault(state.bases[0]!.id)
+  }, [vault, sync.config, state.bases])
+  const [activeSpace, setActiveSpace] = useState<SpaceId>(() => {
+    try {
+      return (localStorage.getItem('markdown-viewer.space') as SpaceId | null) ?? 'vault'
+    } catch {
+      return 'vault'
+    }
+  })
+  const spaces = useMemo(
+    () => spacesOf(state.bases, state.tabs, vault),
+    [state.bases, state.tabs, vault],
+  )
+  const space: Space = spaces.find((one) => one.id === activeSpace) ?? spaces[0]!
+  const visibleTabs = useMemo(
+    () => state.tabs.filter((tab) => spaceOfTab(tab, vault) === space.id),
+    [state.tabs, vault, space.id],
+  )
+  const tabCounts = useMemo(() => {
+    const counts: Partial<Record<SpaceId, number>> = {}
+    for (const tab of state.tabs) {
+      const id = spaceOfTab(tab, vault)
+      counts[id] = (counts[id] ?? 0) + 1
+    }
+    return counts
+  }, [state.tabs, vault])
+  const spaceIndexes = useMemo(
+    () =>
+      space.baseId && state.index[space.baseId]
+        ? { [space.baseId]: state.index[space.baseId]! }
+        : {},
+    [space.baseId, state.index],
+  )
+  const lastActive = useRef<Partial<Record<SpaceId, string | null>>>({})
+  const rememberSpace = (id: SpaceId) => {
+    setActiveSpace(id)
+    try {
+      localStorage.setItem('markdown-viewer.space', id)
+    } catch {
+      // storage blocked
+    }
+  }
+  // Something opened in another space (a file from the system, a link to a
+  // folder) brings that space forward.
+  useEffect(() => {
+    if (!activeTab) return
+    const id = spaceOfTab(activeTab, vault)
+    if (id !== space.id) rememberSpace(id)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [state.activeId, vault])
+  const switchSpace = (id: SpaceId) => {
+    if (id === space.id) return
+    lastActive.current[space.id] = state.activeId
+    rememberSpace(id)
+    const there = state.tabs.filter((tab) => spaceOfTab(tab, vault) === id)
+    const target =
+      there.find((tab) => tab.id === lastActive.current[id]) ?? there[there.length - 1] ?? null
+    actions.activateTab(target?.id ?? null)
+  }
+  const spaceRef = useRef({ id: space.id, vault })
+  useEffect(() => {
+    spaceRef.current = { id: space.id, vault }
+  })
 
   useVaultLinks({
     indexes: state.index,
@@ -830,7 +903,10 @@ export function App() {
 
   const stepTab = useCallback(
     (delta: number) => {
-      const { tabs, activeId } = latestState.current
+      const { activeId } = latestState.current
+      const tabs = latestState.current.tabs.filter(
+        (tab: Tab) => spaceOfTab(tab, spaceRef.current.vault) === spaceRef.current.id,
+      )
       if (tabs.length === 0) return
       const at = tabs.findIndex((tab: Tab) => tab.id === activeId)
       const next = tabs[(at + delta + tabs.length) % tabs.length]
@@ -1062,6 +1138,45 @@ export function App() {
       .catch((error: unknown) => console.error('menu do sistema:', error))
   }, [state.recents, hasDocument])
 
+  /**
+   * Brings a file from outside into the vault: a copy at the vault's root (with
+   * a free name), the original to the system trash, and the file opened again
+   * from its new place, where the sync now carries it.
+   */
+  const moveToVault = async (tab: Tab) => {
+    if (!vault) return
+    if (state.docs[tab.id]?.dirty) {
+      setNotice('Salve o arquivo antes de movê-lo para o vault.')
+      return
+    }
+    try {
+      const files = fileSystem()
+      const bytes = await files.readBinary(tab.baseId, '')
+      const dot = tab.name.lastIndexOf('.')
+      const stem = dot > 0 ? tab.name.slice(0, dot) : tab.name
+      const ext = dot > 0 ? tab.name.slice(dot) : ''
+      let name = tab.name
+      for (let i = 2; await files.stat(vault, name); i++) name = `${stem} ${i}${ext}`
+      await files.write(vault, name, bytes as Uint8Array<ArrayBuffer>)
+      if (files.can.trash) await files.trash(tab.baseId, '').catch(() => {})
+      actions.closeTab(tab.id)
+      await actions.openRecentFile({ baseId: vault, path: name, name, at: Date.now() })
+      // The root of the vault reads its children again: the file is new there.
+      await actions.expandFolder(vault, '')
+    } catch (error) {
+      setNotice(error instanceof Error ? error.message : String(error))
+    }
+  }
+
+  /** Picks the vault's folder: it becomes a base and, from then on, the vault. */
+  const chooseVault = async () => {
+    const base = await actions.openBase()
+    if (base) {
+      setVault(base.id)
+      switchSpace('vault')
+    }
+  }
+
   const dark = theme === 'dark'
 
   return (
@@ -1072,6 +1187,16 @@ export function App() {
           the strip is empty and why the text below repeats the attribute. */}
       <div className="drag-strip" data-drag-window />
       <aside className="sidebar">
+        <SpaceStrip
+          spaces={spaces}
+          active={space.id}
+          counts={tabCounts}
+          syncStatus={sync.status}
+          onSelect={switchSpace}
+          onClose={(closing) => {
+            if (closing.baseId && actions.closeBase(closing.baseId)) switchSpace('vault')
+          }}
+        />
         <div className="brand" data-drag-window>
           <BrandMark />
           <span className="brand-name">markdown-viewer</span>
@@ -1218,83 +1343,96 @@ export function App() {
           </button>
         )}
 
+        {space.kind === 'files' && (
+          <FilesPanel
+            tabs={visibleTabs}
+            activeId={state.activeId}
+            canMoveToVault={!!vault && state.bases.some((base) => base.id === vault)}
+            onActivate={actions.activateTab}
+            onMoveToVault={(tab) => void moveToVault(tab)}
+            onOpenFile={() => void actions.openLooseFile()}
+          />
+        )}
+
         <nav className="tree-scroll" role="tree" aria-label="Arquivos">
-          {state.bases.map((base) => (
-            <section
-              className="tree-section"
-              key={base.id}
-              // Dropped on the empty space of a base: to its root.
-              onDragOver={(event) => {
-                if (!canDrop(draggedEntry(), base.id, '')) return
-                event.preventDefault()
-                event.dataTransfer.dropEffect = 'move'
-                event.currentTarget.classList.add('is-drop-target')
-              }}
-              onDragLeave={(event) => {
-                if (!event.currentTarget.contains(event.relatedTarget as Node)) {
+          {state.bases
+            .filter((base) => base.id === space.baseId)
+            .map((base) => (
+              <section
+                className="tree-section"
+                key={base.id}
+                // Dropped on the empty space of a base: to its root.
+                onDragOver={(event) => {
+                  if (!canDrop(draggedEntry(), base.id, '')) return
+                  event.preventDefault()
+                  event.dataTransfer.dropEffect = 'move'
+                  event.currentTarget.classList.add('is-drop-target')
+                }}
+                onDragLeave={(event) => {
+                  if (!event.currentTarget.contains(event.relatedTarget as Node)) {
+                    event.currentTarget.classList.remove('is-drop-target')
+                  }
+                }}
+                onDrop={(event) => {
+                  event.preventDefault()
                   event.currentTarget.classList.remove('is-drop-target')
-                }
-              }}
-              onDrop={(event) => {
-                event.preventDefault()
-                event.currentTarget.classList.remove('is-drop-target')
-                const moving = draggedEntry()
-                if (canDrop(moving, base.id, '')) void actions.moveEntry(moving, '')
-              }}
-            >
-              <div className="section-head">
-                <h2 className="section-label" title={base.label}>
-                  {base.name}
-                </h2>
-                <div className="section-actions">
-                  <button
-                    type="button"
-                    className="icon-button is-small"
-                    aria-label="Novo arquivo"
-                    title="Novo arquivo"
-                    onClick={() => void createIn(base.id, '', 'file')}
-                  >
-                    <FilePlusIcon size={17} />
-                  </button>
-                  <button
-                    type="button"
-                    className="icon-button is-small"
-                    aria-label="Nova pasta"
-                    title="Nova pasta"
-                    onClick={() => void createIn(base.id, '', 'folder')}
-                  >
-                    <FolderPlusIcon size={17} />
-                  </button>
-                  <button
-                    type="button"
-                    className="icon-button is-small"
-                    aria-label="Revelar o arquivo aberto"
-                    title="Revelar o arquivo aberto"
-                    onClick={() => void revealActive()}
-                  >
-                    <CrosshairIcon size={17} />
-                  </button>
-                  <button
-                    type="button"
-                    className="icon-button is-small"
-                    aria-label="Recolher tudo"
-                    title="Recolher tudo"
-                    onClick={actions.collapseAll}
-                  >
-                    <CollapseIcon size={17} />
-                  </button>
+                  const moving = draggedEntry()
+                  if (canDrop(moving, base.id, '')) void actions.moveEntry(moving, '')
+                }}
+              >
+                <div className="section-head">
+                  <h2 className="section-label" title={base.label}>
+                    {base.name}
+                  </h2>
+                  <div className="section-actions">
+                    <button
+                      type="button"
+                      className="icon-button is-small"
+                      aria-label="Novo arquivo"
+                      title="Novo arquivo"
+                      onClick={() => void createIn(base.id, '', 'file')}
+                    >
+                      <FilePlusIcon size={17} />
+                    </button>
+                    <button
+                      type="button"
+                      className="icon-button is-small"
+                      aria-label="Nova pasta"
+                      title="Nova pasta"
+                      onClick={() => void createIn(base.id, '', 'folder')}
+                    >
+                      <FolderPlusIcon size={17} />
+                    </button>
+                    <button
+                      type="button"
+                      className="icon-button is-small"
+                      aria-label="Revelar o arquivo aberto"
+                      title="Revelar o arquivo aberto"
+                      onClick={() => void revealActive()}
+                    >
+                      <CrosshairIcon size={17} />
+                    </button>
+                    <button
+                      type="button"
+                      className="icon-button is-small"
+                      aria-label="Recolher tudo"
+                      title="Recolher tudo"
+                      onClick={actions.collapseAll}
+                    >
+                      <CollapseIcon size={17} />
+                    </button>
+                  </div>
                 </div>
-              </div>
-              <FileTree
-                data={treeData}
-                parentId={entryId(base.id, '')}
-                depth={0}
-                showAllFiles={settings.showAllFiles}
-                renamingId={renamingId}
-                {...tree}
-              />
-            </section>
-          ))}
+                <FileTree
+                  data={treeData}
+                  parentId={entryId(base.id, '')}
+                  depth={0}
+                  showAllFiles={settings.showAllFiles}
+                  renamingId={renamingId}
+                  {...tree}
+                />
+              </section>
+            ))}
         </nav>
 
         <div className="sidebar-foot">
@@ -1323,7 +1461,7 @@ export function App() {
       <main className="workspace">
         {/* The reveal button sits in this row and not in the breadcrumb bar, so
             that it stays at the height it was pressed at. */}
-        {(state.tabs.length > 0 || !sidebarOpen) && (
+        {(visibleTabs.length > 0 || !sidebarOpen) && (
           <div className="workspace-top">
             {!sidebarOpen && (
               <button
@@ -1337,7 +1475,7 @@ export function App() {
               </button>
             )}
             <Tabs
-              state={state}
+              state={{ ...state, tabs: visibleTabs }}
               pins={pins}
               onActivate={actions.activateTab}
               onPin={actions.pinTab}
@@ -1507,15 +1645,18 @@ export function App() {
           </>
         ) : (
           <EmptyState
-            hasBase={state.bases.length > 0}
-            onOpenBase={() => void actions.openBase()}
+            hasBase={!!space.baseId || space.kind === 'files'}
+            vaultMissing={space.kind === 'vault' && !space.baseId}
+            onOpenBase={() =>
+              void (space.kind === 'vault' && !space.baseId ? chooseVault() : actions.openBase())
+            }
             onOpenFile={() => void actions.openLooseFile()}
           />
         )}
 
         {searchOpen && (
           <SearchPanel
-            indexes={state.index}
+            indexes={spaceIndexes}
             onOpen={(baseId, path, line) => {
               setSearchOpen(false)
               openTarget({ baseId, path, subpath: line === null ? null : '@L' + line })
@@ -1573,6 +1714,18 @@ export function App() {
         <SyncPanel
           bases={state.bases}
           activePath={activeTab ? { baseId: activeTab.baseId, path: activeTab.path } : null}
+          onVault={(folder) => {
+            setVault(folder)
+            if (!state.bases.some((base) => base.id === folder)) {
+              void actions.openRecentBase({
+                id: folder,
+                name: folder.split(/[\\/]/).pop() ?? folder,
+                label: folder,
+                at: Date.now(),
+              })
+            }
+            switchSpace('vault')
+          }}
           onClose={() => setSyncOpen(false)}
         />
       )}
@@ -1593,7 +1746,7 @@ export function App() {
 
       {quickOpen && (
         <QuickOpen
-          indexes={state.index}
+          indexes={spaceIndexes}
           onOpen={(baseId, path) => openTarget({ baseId, path, subpath: null })}
           onClose={() => setQuickOpen(false)}
         />
@@ -1627,11 +1780,33 @@ export function App() {
 
 interface EmptyStateProps {
   hasBase: boolean
+  vaultMissing: boolean
   onOpenBase: () => void
   onOpenFile: () => void
 }
 
-function EmptyState({ hasBase, onOpenBase, onOpenFile }: EmptyStateProps) {
+function EmptyState({ hasBase, vaultMissing, onOpenBase, onOpenFile }: EmptyStateProps) {
+  if (vaultMissing) {
+    return (
+      <div className="empty">
+        <div className="empty-card">
+          <p className="empty-title">Escolha a pasta do vault</p>
+          <p className="empty-hint">
+            É a pasta das suas notas, a mesma que o sync leva para os outros aparelhos. Os arquivos
+            ficam onde estão.
+          </p>
+          <div className="empty-actions">
+            <button type="button" className="empty-action" onClick={onOpenBase}>
+              Escolher a pasta do vault
+            </button>
+            <button type="button" className="empty-action is-quiet" onClick={onOpenFile}>
+              Abrir um arquivo avulso
+            </button>
+          </div>
+        </div>
+      </div>
+    )
+  }
   return (
     <div className="empty">
       <div className="empty-card">

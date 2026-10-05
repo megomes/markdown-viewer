@@ -24,11 +24,14 @@ import {
   type Version,
 } from '~/app/sync'
 import { onApple } from './shortcuts'
+import { getVault } from '~/app/spaces'
 import { pickFolder, readSetupCode } from '~/platform/sync-tauri'
 
 interface Props {
   bases: Base[]
   activePath: { baseId: string; path: string } | null
+  /** The sync was set up on this folder: it becomes the vault. */
+  onVault: (folder: string) => void
   onClose: () => void
 }
 
@@ -55,7 +58,7 @@ const EVENT_LABEL: Record<string, string> = {
   moved: 'movido',
 }
 
-export function SyncPanel({ bases, activePath, onClose }: Props) {
+export function SyncPanel({ bases, activePath, onVault, onClose }: Props) {
   const sync = useSync()
 
   useEffect(() => {
@@ -87,21 +90,23 @@ export function SyncPanel({ bases, activePath, onClose }: Props) {
         ) : sync.config ? (
           <Configured activePath={activePath} />
         ) : (
-          <Setup bases={bases} />
+          <Setup bases={bases} onVault={onVault} />
         )}
       </div>
     </div>
   )
 }
 
-function Setup({ bases }: { bases: Base[] }) {
+function Setup({ bases, onVault }: { bases: Base[]; onVault: (folder: string) => void }) {
   const [mode, setMode] = useState<'join' | 'create'>('join')
   // The folder of the vault, chosen in the system's picker. On the desktop a
   // base is known by its absolute path, so the path is also its id. The open
   // base, if there is exactly one, comes suggested.
-  const [folder, setFolder] = useState<string | null>(
-    bases.length === 1 ? fileSystem().absolutePath(bases[0]!.id, '') : null,
-  )
+  const [folder, setFolder] = useState<string | null>(() => {
+    const vault = getVault()
+    if (vault) return fileSystem().absolutePath(vault, '') ?? vault
+    return bases.length === 1 ? fileSystem().absolutePath(bases[0]!.id, '') : null
+  })
   const [codeFromFile, setCodeFromFile] = useState(false)
   const [vault, setVault] = useState('principal')
   const [deviceName, setDeviceName] = useState(onApple() ? 'mac' : 'windows')
@@ -141,6 +146,7 @@ function Setup({ bases }: { bases: Base[] }) {
         setRecovery(
           await setUpVault({ vault, setupCode: code.trim(), password, deviceName, baseId, folder }),
         )
+        onVault(folder)
       } else {
         await joinExistingVault({
           vault,
@@ -150,6 +156,7 @@ function Setup({ bases }: { bases: Base[] }) {
           baseId,
           folder,
         })
+        onVault(folder)
         await startSync()
       }
     } catch (e) {
