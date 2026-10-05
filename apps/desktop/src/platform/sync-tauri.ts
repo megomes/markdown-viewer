@@ -123,3 +123,28 @@ export const secrets = {
   set: (name: string, value: string) => invoke<void>('secret_set', { name, value }),
   delete: (name: string) => invoke<void>('secret_delete', { name }),
 }
+
+/** The system's folder picker. The chosen folder is opened to the app's file access. */
+export async function pickFolder(): Promise<string | null> {
+  const { open } = await import('@tauri-apps/plugin-dialog')
+  const picked = await open({ directory: true, multiple: false, title: 'Pasta do vault' })
+  if (typeof picked !== 'string') return null
+  await invoke('allow_base', { path: picked })
+  return picked
+}
+
+/**
+ * The setup code, read from `~/.markdown-viewer/sync-setup-code.txt` when this
+ * machine has it (the one where the vault was set up). Null elsewhere.
+ */
+export async function readSetupCode(): Promise<string | null> {
+  try {
+    const { homeDir } = await import('@tauri-apps/api/path')
+    const folder = await join(await homeDir(), '.markdown-viewer')
+    await invoke('allow_base', { path: folder })
+    const text = new TextDecoder().decode(await readFile(await join(folder, 'sync-setup-code.txt')))
+    return text.trim() || null
+  } catch {
+    return null
+  }
+}

@@ -24,6 +24,7 @@ import {
   type Version,
 } from '~/app/sync'
 import { onApple } from './shortcuts'
+import { pickFolder, readSetupCode } from '~/platform/sync-tauri'
 
 interface Props {
   bases: Base[]
@@ -95,7 +96,13 @@ export function SyncPanel({ bases, activePath, onClose }: Props) {
 
 function Setup({ bases }: { bases: Base[] }) {
   const [mode, setMode] = useState<'join' | 'create'>('join')
-  const [baseId, setBaseId] = useState(bases[0]?.id ?? '')
+  // The folder of the vault, chosen in the system's picker. On the desktop a
+  // base is known by its absolute path, so the path is also its id. The open
+  // base, if there is exactly one, comes suggested.
+  const [folder, setFolder] = useState<string | null>(
+    bases.length === 1 ? fileSystem().absolutePath(bases[0]!.id, '') : null,
+  )
+  const [codeFromFile, setCodeFromFile] = useState(false)
   const [vault, setVault] = useState('principal')
   const [deviceName, setDeviceName] = useState(onApple() ? 'mac' : 'windows')
   const [code, setCode] = useState('')
@@ -105,12 +112,26 @@ function Setup({ bases }: { bases: Base[] }) {
   const [error, setError] = useState<string | null>(null)
   const [recovery, setRecovery] = useState<string | null>(null)
 
-  const folder = baseId ? fileSystem().absolutePath(baseId, '') : null
+  const baseId = folder ?? ''
+
+  // Creating happens on the machine that has the setup code file: fill it in.
+  useEffect(() => {
+    if (mode !== 'create' || code) return
+    let cancelled = false
+    void readSetupCode().then((found) => {
+      if (cancelled || !found) return
+      setCode(found)
+      setCodeFromFile(true)
+    })
+    return () => {
+      cancelled = true
+    }
+  }, [mode, code])
   const usesSetupCode = mode === 'create' || code.trim().length > 20
 
   const submit = async () => {
     setError(null)
-    if (!folder) return setError('Abra a pasta do vault antes.')
+    if (!folder) return setError('Escolha a pasta do vault.')
     if (mode === 'create' && password !== confirm) return setError('As duas senhas não batem.')
     if (mode === 'create' && password.length < 10)
       return setError('Use uma senha de pelo menos 10 caracteres.')
@@ -170,16 +191,25 @@ function Setup({ bases }: { bases: Base[] }) {
         na mesma pasta brigam. Teste numa cópia do vault até o dia da troca (seção 8 da spec).
       </p>
 
-      <label className="sync-field">
+      <div className="sync-field">
         <span>Pasta</span>
-        <select value={baseId} onChange={(e) => setBaseId(e.target.value)}>
-          {bases.map((base) => (
-            <option key={base.id} value={base.id}>
-              {base.label}
-            </option>
-          ))}
-        </select>
-      </label>
+        <div className="sync-folder">
+          <span className={folder ? 'sync-folder-path' : 'sync-folder-path is-empty'}>
+            {folder ?? 'Nenhuma pasta escolhida'}
+          </span>
+          <button
+            type="button"
+            className="viewer-action"
+            onClick={() =>
+              void pickFolder()
+                .then((picked) => picked && setFolder(picked))
+                .catch((e: unknown) => setError(e instanceof Error ? e.message : String(e)))
+            }
+          >
+            Escolher pasta…
+          </button>
+        </div>
+      </div>
       <label className="sync-field">
         <span>Vault</span>
         <input
@@ -200,7 +230,7 @@ function Setup({ bases }: { bases: Base[] }) {
           onChange={(e) => setCode(e.target.value)}
           placeholder={
             mode === 'create'
-              ? '~/.markdown-viewer/sync-setup-code.txt'
+              ? 'Cole o conteúdo de ~/.markdown-viewer/sync-setup-code.txt'
               : 'ABCDE-FGHIJ, mostrado no outro aparelho'
           }
           type={mode === 'create' ? 'password' : 'text'}
@@ -218,11 +248,21 @@ function Setup({ bases }: { bases: Base[] }) {
           <input type="password" value={confirm} onChange={(e) => setConfirm(e.target.value)} />
         </label>
       )}
+      {codeFromFile && mode === 'create' && (
+        <p className="sync-note">O código foi lido do arquivo deste computador.</p>
+      )}
       {error && <p className="sync-error">{error}</p>}
+      {!busy && (!folder || !code.trim()) && (
+        <p className="sync-note">
+          Falta {!folder ? 'escolher a pasta' : ''}
+          {!folder && !code.trim() ? ' e ' : ''}
+          {!code.trim() ? (mode === 'create' ? 'o código de configuração' : 'o código') : ''}.
+        </p>
+      )}
       <button
         type="button"
         className="sync-primary"
-        disabled={busy || !code.trim()}
+        disabled={busy || !code.trim() || !folder}
         onClick={() => void submit()}
       >
         {busy ? 'Um momento…' : mode === 'create' ? 'Criar e guardar a chave' : 'Entrar'}
