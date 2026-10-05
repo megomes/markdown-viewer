@@ -20,6 +20,8 @@ export type ShortcutId =
   | 'toggleDock'
   | 'settings'
   | 'feedback'
+  | 'quickOpen'
+  | 'searchVault'
   | 'print'
   | 'zoomIn'
   | 'zoomOut'
@@ -53,6 +55,8 @@ export const SHORTCUTS: Shortcut[] = [
   { id: 'toggleDock', label: 'Barra de notas fixadas', key: 'd', mod: true, shift: true },
   { id: 'settings', label: 'Ajustes', key: ',', mod: true },
   { id: 'feedback', label: 'Feedback do app', key: 'b', mod: true, shift: true },
+  { id: 'quickOpen', label: 'Abrir rápido', key: 't', mod: true },
+  { id: 'searchVault', label: 'Buscar no vault', key: 'f', mod: true, shift: true },
   { id: 'print', label: 'Imprimir', key: 'p', mod: true },
   { id: 'zoomIn', label: 'Aumentar a interface', key: '=', mod: true },
   { id: 'zoomOut', label: 'Diminuir a interface', key: '-', mod: true },

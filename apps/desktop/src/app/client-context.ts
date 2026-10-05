@@ -12,7 +12,7 @@
 import { isDesktop } from '~/platform'
 
 /** The stage of docs/spec.md being built, recorded with every note. */
-export const STAGE = 'etapa-2'
+export const STAGE = 'etapa-3'
 
 const DEVICE_KEY = 'markdown-viewer.device-id'
 

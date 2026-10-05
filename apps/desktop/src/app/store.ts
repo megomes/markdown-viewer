@@ -1,6 +1,12 @@
 import { useCallback, useEffect, useMemo, useReducer, useRef } from 'react'
 import { fileSystem } from '~/platform'
-import { buildIndex, EMPTY_INDEX, type BaseIndex } from '@markdown-viewer/core/base-index'
+import {
+  buildIndex,
+  EMPTY_INDEX,
+  resolverOf,
+  type BaseIndex,
+} from '@markdown-viewer/core/base-index'
+import { rewriteLinks } from '@markdown-viewer/core/rewrite'
 import {
   clearRecents,
   forgetBase,
@@ -718,6 +724,11 @@ export function useWorkspace() {
     [freeName, loadChildren, report],
   )
 
+  /** Set further down, once the index can be rebuilt. See `updateLinksAfterMove`. */
+  const afterMove = useRef<(baseId: string, from: string, to: string) => Promise<void>>(
+    async () => {},
+  )
+
   const renameEntry = useCallback(
     async (entry: Entry, name: string) => {
       const trimmed = name.trim()
@@ -728,6 +739,7 @@ export function useWorkspace() {
         await fileSystem().move(entry.baseId, entry.path, target)
         dispatch({ type: 'entry/moved', baseId: entry.baseId, from: entry.path, to: target })
         await loadChildren(entry.baseId, parent)
+        await afterMove.current(entry.baseId, entry.path, target)
       } catch (error) {
         report(error)
       }
@@ -804,6 +816,7 @@ export function useWorkspace() {
         }
         await files.move(tab.baseId, tab.path, target)
         dispatch({ type: 'entry/moved', baseId: tab.baseId, from: tab.path, to: target })
+        void afterMove.current(tab.baseId, tab.path, target)
         await loadChildren(tab.baseId, parent)
         return { ok: true, id: entryId(tab.baseId, target), name: fileName, path: target }
       } catch (error) {
@@ -973,6 +986,71 @@ export function useWorkspace() {
       indexing.current.delete(baseId)
     }
   }, [])
+
+  /**
+   * After a rename or a move, every note that pointed at what moved points at
+   * its new place, as Obsidian does with automatic link updates on. A note
+   * open with unsaved changes is left alone and named, so no edit is lost.
+   */
+  const updateLinksAfterMove = useCallback(
+    async (baseId: string, from: string, to: string) => {
+      const index = latest.current.index[baseId]
+      if (!index?.done) return
+      const resolve = resolverOf(index)
+      const moved = new Map<string, string>()
+      for (const path of index.paths) {
+        if (path === from) moved.set(path, to)
+        else if (path.startsWith(from + '/')) moved.set(path, to + path.slice(from.length))
+      }
+      if (moved.size === 0) return
+
+      const after = index.paths.map((path) => moved.get(path) ?? path)
+      const names = new Map<string, number>()
+      for (const path of after) {
+        const name = path.slice(path.lastIndexOf('/') + 1).toLowerCase()
+        names.set(name, (names.get(name) ?? 0) + 1)
+      }
+      const ctx = {
+        moved,
+        resolveBefore: (target: string, fromPath: string) => resolve.resolve(target, fromPath),
+        nameIsAmbiguous: (name: string) => (names.get(name.toLowerCase()) ?? 0) > 1,
+      }
+
+      const skipped: string[] = []
+      for (const file of Object.values(index.files)) {
+        const touchesMoved = file.links.some((link) => moved.has(link)) || moved.has(file.path)
+        if (!touchesMoved || !/\.(md|markdown)$/i.test(file.path)) continue
+        const now = moved.get(file.path) ?? file.path
+        const id = entryId(baseId, now)
+        const doc = latest.current.docs[id]
+        if (doc?.dirty) {
+          skipped.push(now)
+          continue
+        }
+        try {
+          const loaded = await fileSystem().read(baseId, now)
+          const text = rewriteLinks(loaded.text, file.path, now, ctx)
+          if (text === null) continue
+          await fileSystem().write(baseId, now, encode(text, loaded.shape))
+          if (doc) await reload(id)
+        } catch (error) {
+          report(error)
+        }
+      }
+      if (skipped.length) {
+        report(
+          new Error(
+            'Links não atualizados em notas com alterações não salvas: ' + skipped.join(', '),
+          ),
+        )
+      }
+      await indexBase(baseId)
+    },
+    [indexBase, reload, report],
+  )
+  useEffect(() => {
+    afterMove.current = updateLinksAfterMove
+  }, [updateLinksAfterMove])
 
   const forgetRecents = useCallback(
     () => dispatch({ type: 'recents/set', recents: clearRecents() }),

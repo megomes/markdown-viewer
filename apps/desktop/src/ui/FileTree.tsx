@@ -1,6 +1,7 @@
 import { memo, useEffect, useRef } from 'react'
 import { isPlainText, isTextFile, type Entry } from '@markdown-viewer/core/fs'
 import { ChevronIcon, FileIcon, FolderIcon, MarkdownIcon } from './icons'
+import { NamedIcon } from './NamedIcon'
 
 /**
  * The tree takes the slices of state it actually reads instead of the whole
@@ -13,6 +14,8 @@ export interface TreeData {
   expanded: Record<string, boolean>
   activeId: string | null
   filter: string
+  /** Entry id to an Iconize icon name, for folders that have one. */
+  icons?: Record<string, string>
 }
 
 export interface TreeHandlers {
@@ -43,7 +46,8 @@ function matchesFilter(data: TreeData, entry: Entry, filter: string): boolean {
 }
 
 /** Folder, Markdown file, plain text and everything else each get their own mark. */
-function EntryIcon({ entry }: { entry: Entry }) {
+function EntryIcon({ entry, icon }: { entry: Entry; icon?: string | undefined }) {
+  if (icon) return <NamedIcon name={icon} className="tree-icon is-named" />
   if (entry.kind === 'directory') return <FolderIcon size={15} className="tree-icon is-folder" />
   if (isPlainText(entry.name)) return <FileIcon size={15} className="tree-icon is-text" />
   if (isTextFile(entry.name)) return <MarkdownIcon size={15} className="tree-icon is-markdown" />
@@ -115,7 +119,7 @@ export const FileTree = memo(function FileTree({
                     (entry.kind === 'directory' ? (open ? ' is-open' : '') : ' is-leaf')
                   }
                 />
-                <EntryIcon entry={entry} />
+                <EntryIcon entry={entry} icon={data.icons?.[entry.id]} />
                 <span className="tree-name">{entry.name}</span>
               </button>
             )}

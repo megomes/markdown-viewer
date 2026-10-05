@@ -18,6 +18,8 @@ import { dialect } from '@markdown-viewer/core/dialect'
 import { documentSource } from './images'
 import { frontmatterBlock } from './frontmatter'
 import { seamlessMarkdown } from './seamless'
+import { blockWidgets } from './blocks'
+import { linkClicks, linkStyles } from './links'
 import { tableBlocks } from './tables'
 import { documentTitle, titleCompartment, type Rename } from './title'
 import { editorTheme, markdownHighlight } from './theme'
@@ -70,6 +72,9 @@ export function editorExtensions({
     readOnlyCompartment.of(readOnlyExtension(readOnly)),
     keymap.of([
       { key: 'Mod-s', preventDefault: true, run: () => (onSave(), true) },
+      // The app's search across the vault. Claimed here so CodeMirror does not
+      // read it as Mod-f without the shift and open its own panel as well.
+      { key: 'Shift-Mod-f', run: () => true },
       { key: 'Mod-Enter', preventDefault: true, run: toggleTask },
       { key: 'Mod-b', preventDefault: true, run: toggleBold },
       { key: 'Mod-i', preventDefault: true, run: toggleItalic },
@@ -92,7 +97,10 @@ export function editorExtensions({
           markdownHighlight,
           frontmatterBlock,
           tableBlocks,
+          blockWidgets,
           seamlessMarkdown,
+          linkStyles,
+          linkClicks,
         ]),
   ]
 }

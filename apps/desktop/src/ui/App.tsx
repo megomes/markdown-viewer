@@ -53,6 +53,12 @@ import { UpdateNotice } from './UpdateNotice'
 import { Recents } from './Recents'
 import { SettingsWindow } from './SettingsWindow'
 import { Feedback } from './Feedback'
+import { useVaultLinks } from './useVaultLinks'
+import { readFolderIcons } from '~/app/folder-icons'
+import { readBookmarks, type Bookmark } from '~/app/bookmarks'
+import { QuickOpen } from './QuickOpen'
+import { SearchPanel } from './SearchPanel'
+import { openTarget } from '~/editor/links'
 import { MessageSquareText } from 'lucide-react'
 import { SidebarResizer } from './SidebarResizer'
 import { canPrint, printHtml } from './print'
@@ -105,6 +111,10 @@ export function App() {
   const [sidebarOpen, setSidebarOpen] = useState(() => loadSession()?.sidebarOpen ?? true)
   const [settingsOpen, setSettingsOpen] = useState(false)
   const [feedbackOpen, setFeedbackOpen] = useState(false)
+  const [quickOpen, setQuickOpen] = useState(false)
+  const [folderIcons, setFolderIcons] = useState<Record<string, string>>({})
+  const [bookmarks, setBookmarks] = useState<Bookmark[]>([])
+  const [searchOpen, setSearchOpen] = useState(false)
   const [measuring, setMeasuring] = useState(false)
   const [menu, setMenu] = useState<{ items: MenuItem[]; x: number; y: number } | null>(null)
   const restore = actions.restoreSession
@@ -130,9 +140,24 @@ export function App() {
       expanded: state.expanded,
       activeId: state.activeId,
       filter: state.filter,
+      icons: folderIcons,
     }),
-    [state.children, state.expanded, state.activeId, state.filter],
+    [state.children, state.expanded, state.activeId, state.filter, folderIcons],
   )
+
+  // Folder icons from Iconize, read once per set of open folders.
+  useEffect(() => {
+    let cancelled = false
+    void Promise.all(state.bases.map((base) => readFolderIcons(base.id))).then((maps) => {
+      if (!cancelled) setFolderIcons(Object.assign({}, ...maps))
+    })
+    void Promise.all(state.bases.map((base) => readBookmarks(base.id))).then((lists) => {
+      if (!cancelled) setBookmarks(lists.flat())
+    })
+    return () => {
+      cancelled = true
+    }
+  }, [state.bases])
 
   /**
    * Cursor and scroll per file. It is a reference and not state because nothing
@@ -320,6 +345,21 @@ export function App() {
   }, [actions])
 
   const activeTab = state.tabs.find((tab) => tab.id === state.activeId) ?? null
+
+  useVaultLinks({
+    indexes: state.index,
+    editor,
+    activeTab,
+    headings,
+    openText: (baseId, path) =>
+      void actions.openRecentFile({
+        baseId,
+        path,
+        name: path.slice(path.lastIndexOf('/') + 1),
+        at: Date.now(),
+      }),
+    report: setNotice,
+  })
   const activeDoc = state.activeId ? (state.docs[state.activeId] ?? null) : null
   // Read from callbacks that must not change identity on every keystroke. The
   // assignment happens after the commit, which is the only moment React allows
@@ -890,6 +930,12 @@ export function App() {
           case 'feedback':
             setFeedbackOpen((open) => !open)
             break
+          case 'quickOpen':
+            setQuickOpen((open) => !open)
+            break
+          case 'searchVault':
+            setSearchOpen((open) => !open)
+            break
           case 'print': {
             // The browser would otherwise print the interface itself.
             if (!activeId) return
@@ -1026,6 +1072,30 @@ export function App() {
             Abrir arquivo
           </button>
         </div>
+
+        {bookmarks.length > 0 && (
+          <div className="bookmarks">
+            <p className="bookmarks-title">Favoritos</p>
+            {bookmarks.map((bookmark) => (
+              <button
+                key={bookmark.baseId + bookmark.path}
+                type="button"
+                className={
+                  'bookmark' +
+                  (activeTab?.baseId === bookmark.baseId && activeTab.path === bookmark.path
+                    ? ' is-active'
+                    : '')
+                }
+                title={bookmark.path}
+                onClick={() =>
+                  openTarget({ baseId: bookmark.baseId, path: bookmark.path, subpath: null })
+                }
+              >
+                {bookmark.title}
+              </button>
+            ))}
+          </div>
+        )}
 
         {state.bases.length > 0 && (
           <div className="search">
@@ -1309,6 +1379,17 @@ export function App() {
           />
         )}
 
+        {searchOpen && (
+          <SearchPanel
+            indexes={state.index}
+            onOpen={(baseId, path, line) => {
+              setSearchOpen(false)
+              openTarget({ baseId, path, subpath: line === null ? null : '@L' + line })
+            }}
+            onClose={() => setSearchOpen(false)}
+          />
+        )}
+
         {feedbackOpen && (
           <Feedback
             screen={feedbackScreen(settingsOpen, activeTab)}
@@ -1351,6 +1432,14 @@ export function App() {
           body={question.body}
           choices={question.choices}
           onCancel={() => setQuestion(null)}
+        />
+      )}
+
+      {quickOpen && (
+        <QuickOpen
+          indexes={state.index}
+          onOpen={(baseId, path) => openTarget({ baseId, path, subpath: null })}
+          onClose={() => setQuickOpen(false)}
         />
       )}
 

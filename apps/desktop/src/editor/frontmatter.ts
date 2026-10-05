@@ -9,6 +9,7 @@
 
 import { StateField, type EditorState } from '@codemirror/state'
 import { Decoration, EditorView, WidgetType, type DecorationSet } from '@codemirror/view'
+import { parse as parseYaml } from 'yaml'
 import { touches } from './active'
 
 const FENCE = /^-{3,}\s*$/
@@ -55,6 +56,41 @@ interface Property {
   /** A scalar comes as one value; a YAML list comes as many. */
   values: string[]
   list: boolean
+  /** A true or false, drawn as a checkbox the way Obsidian draws it. */
+  checkbox?: boolean
+}
+
+function show(value: unknown): string {
+  if (value instanceof Date) return value.toISOString().slice(0, 10)
+  if (value !== null && typeof value === 'object') return JSON.stringify(value)
+  return String(value)
+}
+
+/**
+ * Reads the front matter as YAML, which is what Obsidian does, so a list written
+ * `[a, b]` is a list and a quoted value loses its quotes. YAML that does not
+ * parse falls back to the line by line reading below, so nothing vanishes.
+ */
+export function parseProperties(text: string): Property[] {
+  let data: unknown
+  try {
+    // The block hands over its closing fence too, which YAML would read as a
+    // second document.
+    data = parseYaml(text.replace(/\r?\n?(?:---|\.\.\.)[ \t]*$/, ''), { uniqueKeys: false })
+  } catch {
+    return parseLoosely(text)
+  }
+  if (data === null || data === undefined) return []
+  if (typeof data !== 'object' || Array.isArray(data)) return parseLoosely(text)
+  return Object.entries(data as Record<string, unknown>).map(([key, value]) => {
+    if (Array.isArray(value)) {
+      return { key, values: value.filter((v) => v !== null && v !== '').map(show), list: true }
+    }
+    if (typeof value === 'boolean') {
+      return { key, values: [String(value)], list: false, checkbox: value }
+    }
+    return { key, values: value === null || value === '' ? [] : [show(value)], list: false }
+  })
 }
 
 /**
@@ -62,7 +98,7 @@ interface Property {
  * key followed by `- item` lines. Anything else is kept as a scalar, so nothing
  * is silently dropped from view.
  */
-export function parseProperties(text: string): Property[] {
+function parseLoosely(text: string): Property[] {
   const properties: Property[] = []
   let current: Property | null = null
 
@@ -118,7 +154,7 @@ export class FrontmatterWidget extends WidgetType {
       for (const value of property.values) {
         const item = document.createElement('span')
         item.className = property.list ? 'cm-md-chip' : 'cm-md-scalar'
-        item.textContent = value
+        item.textContent = property.checkbox === undefined ? value : property.checkbox ? '☑' : '☐'
         values.append(item)
       }
 

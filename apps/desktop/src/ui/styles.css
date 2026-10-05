@@ -2739,3 +2739,264 @@ html[data-window='dock'] .chip {
   background: var(--accent-hover);
   color: var(--accent-on);
 }
+
+/* ------------------------------------------------------------ quick open */
+
+.palette-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 60;
+  display: flex;
+  justify-content: center;
+  padding-top: 12vh;
+  background: color-mix(in srgb, var(--bg-app) 40%, transparent);
+}
+
+.palette {
+  display: flex;
+  flex-direction: column;
+  width: min(640px, calc(100vw - 32px));
+  max-height: 60vh;
+  overflow: hidden;
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-lg);
+  background: var(--surface-1);
+  box-shadow: 0 20px 60px rgb(0 0 0 / 0.35);
+}
+
+.palette-input {
+  padding: 14px 16px;
+  border: 0;
+  border-bottom: 1px solid var(--border-subtle);
+  outline: 0;
+  background: transparent;
+  color: var(--text-primary);
+  font: inherit;
+  font-size: 15px;
+}
+
+.palette-list {
+  margin: 0;
+  padding: 6px;
+  overflow-y: auto;
+  list-style: none;
+}
+
+.palette-item {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  padding: 7px 10px;
+  border-radius: var(--radius-md);
+  cursor: pointer;
+}
+
+.palette-item.is-selected {
+  background: var(--surface-hover);
+}
+
+.palette-label {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  color: var(--text-primary);
+}
+
+.palette-alias {
+  padding: 0 6px;
+  border-radius: 4px;
+  background: var(--purple-bg);
+  color: var(--purple-text);
+  font-size: 11px;
+}
+
+.palette-path {
+  color: var(--text-tertiary);
+  font-size: 12px;
+}
+
+.palette-empty {
+  padding: 10px;
+  color: var(--text-tertiary);
+}
+
+/* ---------------------------------------------------------- vault search */
+
+.search-layer {
+  position: absolute;
+  inset: 0;
+  z-index: 25;
+  overflow: auto;
+  background: var(--bg-content);
+}
+
+.search-page {
+  max-width: 920px;
+  margin: 0 auto;
+  padding: 22px 28px 60px;
+}
+
+.search-head {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  margin-bottom: 14px;
+}
+
+.search-box {
+  flex: 1;
+  padding: 10px 12px;
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-md);
+  outline: 0;
+  background: var(--surface-1);
+  color: var(--text-primary);
+  font: inherit;
+}
+
+.search-box:focus {
+  border-color: var(--accent);
+}
+
+.search-tag-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.search-tag {
+  padding: 3px 9px;
+  border: 1px solid var(--border-default);
+  border-radius: 999px;
+  background: var(--surface-1);
+  color: var(--text-secondary);
+  font: inherit;
+  font-size: 12.5px;
+  cursor: pointer;
+}
+
+.search-tag:hover {
+  border-color: var(--border-emphasis);
+  color: var(--text-primary);
+}
+
+.search-tag span {
+  color: var(--text-tertiary);
+}
+
+.search-count,
+.search-empty {
+  color: var(--text-tertiary);
+  font-size: 12px;
+}
+
+.search-result {
+  margin-bottom: 12px;
+  padding-bottom: 10px;
+  border-bottom: 1px solid var(--border-subtle);
+}
+
+.search-file,
+.search-line {
+  display: flex;
+  gap: 10px;
+  align-items: baseline;
+  width: 100%;
+  padding: 3px 6px;
+  border: 0;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.search-file:hover,
+.search-line:hover {
+  background: var(--surface-hover);
+}
+
+.search-title {
+  color: var(--text-primary);
+  font-weight: 600;
+}
+
+.search-path {
+  overflow: hidden;
+  color: var(--text-tertiary);
+  font-size: 12px;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.search-line {
+  color: var(--text-secondary);
+  font-size: 13px;
+}
+
+.search-line-number {
+  flex: none;
+  min-width: 2.5em;
+  color: var(--text-tertiary);
+  font-family: var(--font-mono);
+  font-size: 11px;
+  text-align: right;
+}
+
+.search-line mark {
+  border-radius: 3px;
+  background: var(--selection);
+  color: var(--text-primary);
+}
+
+/* Icons Iconize gave a folder in Obsidian. */
+.tree-icon.is-named {
+  color: var(--text-secondary);
+}
+
+.tree-icon.is-emoji {
+  display: inline-flex;
+  justify-content: center;
+  width: 15px;
+  font-size: 13px;
+  line-height: 1;
+}
+
+/* Obsidian's bookmarks, as favourites at the top of the sidebar. */
+.bookmarks {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+}
+
+.bookmarks-title {
+  margin: 0 0 2px;
+  padding: 0 0.5rem;
+  color: var(--text-tertiary);
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.bookmark {
+  overflow: hidden;
+  padding: 3px 0.5rem;
+  border: 0;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--text-secondary);
+  font: inherit;
+  font-size: 13px;
+  text-align: left;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  cursor: pointer;
+}
+
+.bookmark:hover,
+.bookmark.is-active {
+  background: var(--surface-hover);
+  color: var(--text-primary);
+}

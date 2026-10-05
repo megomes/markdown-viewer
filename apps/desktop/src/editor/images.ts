@@ -10,6 +10,7 @@ import { Facet } from '@codemirror/state'
 import { WidgetType, type EditorView } from '@codemirror/view'
 import { fileSystem } from '~/platform'
 import { parentPath } from '@markdown-viewer/core/fs'
+import { resolveLink, resolverGeneration } from './links'
 
 /** Which file the editor is showing, so relative paths can be resolved. */
 export const documentSource = Facet.define<Source, Source | null>({
@@ -66,7 +67,13 @@ export async function resolveImage(source: Source, src: string): Promise<string 
   const wanted = decodeURI(src)
   // Relative to the document first, then from the root of the base, which is
   // how a wiki-style embed is usually written.
-  const candidates = [normalize(parentPath(source.path) + '/' + wanted), normalize(wanted)]
+  // The vault's own resolution comes first: `![[imagem.png]]` lives in `Files/`.
+  const linked = resolveLink(source.baseId, wanted, source.path)
+  const candidates = [
+    ...(linked ? [linked] : []),
+    normalize(parentPath(source.path) + '/' + wanted),
+    normalize(wanted),
+  ]
 
   for (const path of candidates) {
     const key = source.baseId + ':' + path
@@ -131,6 +138,8 @@ export function writeImage(spec: ImageSpec, width: number | null): string {
 const MIN_WIDTH = 48
 
 export class ImageWidget extends WidgetType {
+  private readonly generation = resolverGeneration()
+
   constructor(
     private readonly spec: ImageSpec,
     private readonly source: Source,
@@ -142,6 +151,7 @@ export class ImageWidget extends WidgetType {
 
   eq(other: ImageWidget): boolean {
     return (
+      other.generation === this.generation &&
       other.from === this.from &&
       other.spec.src === this.spec.src &&
       other.spec.width === this.spec.width &&

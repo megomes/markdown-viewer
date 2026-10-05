@@ -69,16 +69,19 @@ export interface Callout {
   markFrom: number
   /** Offset inside the line where the marker, and its trailing space, end. */
   markTo: number
+  /** `-` folds the callout shut as written, `+` leaves it open but foldable. */
+  fold: '' | '+' | '-'
 }
 
 export function parseCallout(lineText: string): Callout | null {
   const match = CALLOUT_HEAD.exec(lineText)
   if (!match) return null
-  const [, lead, marker, raw] = match
+  const [, lead, marker, raw, fold] = match
   return {
     type: ALIASES[raw!.toLowerCase()] ?? 'note',
     markFrom: lead!.length,
     markTo: lead!.length + marker!.length,
+    fold: (fold ?? '') as Callout['fold'],
   }
 }
 

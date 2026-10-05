@@ -4,7 +4,7 @@ import { parseCallout } from './callouts'
 describe('parseCallout', () => {
   it('lê o tipo e onde o marcador começa e acaba', () => {
     const callout = parseCallout('> [!tip] Uma dica')
-    expect(callout).toEqual({ type: 'tip', markFrom: 2, markTo: 9 })
+    expect(callout).toEqual({ type: 'tip', markFrom: 2, markTo: 9, fold: '' })
   })
 
   it('aceita os apelidos que as notas usam na prática', () => {

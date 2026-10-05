@@ -5,7 +5,7 @@
  * plain Markdown text, which is what keeps select-all-and-copy giving Markdown
  * back instead of rendered text.
  *
- * Two things guard against the failure modes listed in funcionalidades.md §6:
+ * Two things keep typing fast:
  * decorations are built only for the visible ranges, so typing in a large file
  * does not rebuild the whole document, and the set is rebuilt on a cursor move
  * only when the move changed which lines are active, so dragging a selection
@@ -17,6 +17,7 @@ import type { EditorState, Range } from '@codemirror/state'
 import {
   Decoration,
   ViewPlugin,
+  WidgetType,
   type DecorationSet,
   type EditorView,
   type ViewUpdate,
@@ -24,8 +25,44 @@ import {
 import { activeLines, overlaps, sameLines, type LineSpan } from './active'
 import { CalloutIconWidget, parseCallout } from './callouts'
 import { findFrontmatter } from './frontmatter'
-import { documentSource, ImageWidget, parseImage } from './images'
+import { documentSource, ImageWidget, isImagePath, parseImage } from './images'
 import { BulletWidget, RuleWidget, TaskWidget } from './widgets'
+import { calloutFolded, toggleCallout } from './blocks'
+import { FileCardWidget, NoteEmbedWidget } from './embeds'
+import { linksChanged, resolveLink, splitLink } from './links'
+
+/** The chevron on a foldable callout, which folds and unfolds it. */
+class FoldWidget extends WidgetType {
+  constructor(
+    private readonly head: number,
+    private readonly folded: boolean,
+  ) {
+    super()
+  }
+  eq(other: FoldWidget): boolean {
+    return other.head === this.head && other.folded === this.folded
+  }
+  toDOM(view: EditorView): HTMLElement {
+    const button = document.createElement('span')
+    button.className = 'cm-md-callout-fold' + (this.folded ? ' is-folded' : '')
+    button.setAttribute('role', 'button')
+    button.title = this.folded ? 'Mostrar o conteúdo' : 'Recolher'
+    button.textContent = '›'
+    button.addEventListener('mousedown', (event) => {
+      event.preventDefault()
+      event.stopPropagation()
+      view.dispatch({ effects: toggleCallout.of(this.head) })
+    })
+    return button
+  }
+  ignoreEvent(): boolean {
+    return true
+  }
+}
+
+/** `%% comentário %%` on one line, and the `^id` that names a block. */
+const COMMENT = /%%[^%\n]*?%%/g
+const BLOCK_ID = /\s\^[A-Za-z0-9-]+\s*$/
 
 const hidden = Decoration.replace({})
 
@@ -111,6 +148,9 @@ function build(view: EditorView): DecorationSet {
   // raw YAML is what the person should see once the block is open.
   const matter = findFrontmatter(state)
   const source = state.facet(documentSource)
+  // A block that spans two visible ranges is entered once for each. Its line
+  // decorations repeat harmlessly, but its widgets would be drawn twice.
+  const drawn = new Set<number>()
 
   for (const visible of view.visibleRanges) {
     const { from, to } = visible
@@ -138,6 +178,8 @@ function build(view: EditorView): DecorationSet {
             }
 
             decorateBlock(state, node, visible, 'cm-md-callout cm-md-callout-' + callout.type, out)
+            if (drawn.has(node.from)) return
+            drawn.add(node.from)
 
             // The icon stays put in both states, so revealing `[!tip]` does not
             // shift the title sideways.
@@ -148,6 +190,14 @@ function build(view: EditorView): DecorationSet {
             )
             if (!overlaps(spans, first.from, first.to)) {
               out.push(hidden.range(first.from + callout.markFrom, first.from + callout.markTo))
+            }
+            if (callout.fold) {
+              const folded = calloutFolded(state, first.from, callout.fold === '-')
+              out.push(
+                Decoration.widget({ widget: new FoldWidget(first.from, folded), side: 1 }).range(
+                  first.to,
+                ),
+              )
             }
             return
           }
@@ -161,6 +211,20 @@ function build(view: EditorView): DecorationSet {
             // and the children are left alone either way: a replaced range may
             // not contain another one.
             if (revealed || !source) return false
+            if (name === 'Embed') {
+              const { target, subpath } = splitLink(
+                state.doc.sliceString(node.from + 3, node.to - 2),
+              )
+              if (!isImagePath(target)) {
+                const path = target ? resolveLink(source.baseId, target, source.path) : source.path
+                const widget =
+                  path && /\.(md|markdown)$/i.test(path)
+                    ? new NoteEmbedWidget(source, path, subpath)
+                    : new FileCardWidget(source, path ?? null, target)
+                out.push(Decoration.replace({ widget }).range(node.from, node.to))
+                return false
+              }
+            }
             const spec = parseImage(state.doc.sliceString(node.from, node.to))
             if (!spec) return false
             out.push(
@@ -172,6 +236,7 @@ function build(view: EditorView): DecorationSet {
           }
 
           case 'Paragraph': {
+            if (!revealed) hideInlineExtras(state, node, out)
             // `[^1]: uma nota` is a footnote definition, drawn apart from the
             // prose around it.
             const first = state.doc.lineAt(node.from)
@@ -236,6 +301,24 @@ function build(view: EditorView): DecorationSet {
   return Decoration.set(out, true)
 }
 
+/** Comments and block ids vanish outside the line being edited, as in Obsidian. */
+function hideInlineExtras(
+  state: EditorState,
+  node: { from: number; to: number },
+  out: Range<Decoration>[],
+): void {
+  const text = state.doc.sliceString(node.from, node.to)
+  for (const match of text.matchAll(COMMENT)) {
+    out.push(hidden.range(node.from + match.index!, node.from + match.index! + match[0].length))
+  }
+  let at = node.from
+  for (const line of text.split('\n')) {
+    const id = BLOCK_ID.exec(line)
+    if (id) out.push(hidden.range(at + id.index, at + line.length))
+    at += line.length + 1
+  }
+}
+
 export const seamlessMarkdown = ViewPlugin.fromClass(
   class {
     decorations: DecorationSet
@@ -249,7 +332,10 @@ export const seamlessMarkdown = ViewPlugin.fromClass(
     update(update: ViewUpdate): void {
       const spans = activeLines(update.state)
       const movedLine = !sameLines(spans, this.spans)
-      if (!update.docChanged && !update.viewportChanged && !movedLine) return
+      const nudged = update.transactions.some((tr) =>
+        tr.effects.some((effect) => effect.is(linksChanged) || effect.is(toggleCallout)),
+      )
+      if (!update.docChanged && !update.viewportChanged && !movedLine && !nudged) return
       this.spans = spans
       this.decorations = build(update.view)
     }

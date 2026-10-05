@@ -113,6 +113,8 @@ export function menuPlan({ recents, hasDocument, apple }: MenuInput): MenuNode[]
       items: [
         item('Nova nota', 'newFile'),
         { kind: 'separator' },
+        item('Abrir rápido', 'quickOpen'),
+        item('Buscar no vault', 'searchVault'),
         item('Abrir arquivo', 'openFile'),
         item('Abrir pasta', 'openBase'),
         {

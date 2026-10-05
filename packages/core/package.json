@@ -13,7 +13,8 @@
   },
   "dependencies": {
     "@lezer/highlight": "^1.2.3",
-    "@lezer/markdown": "^1.7.2"
+    "@lezer/markdown": "^1.7.2",
+    "yaml": "^2.9.1"
   },
   "devDependencies": {
     "@codemirror/lang-markdown": "^6.5.2"

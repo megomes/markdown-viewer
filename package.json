@@ -20,11 +20,13 @@
     "verify": "oxlint && npm run typecheck && npm test && npm run build",
     "format": "prettier --write .",
     "format:check": "prettier --check .",
-    "feedback": "node services/feedback/scripts/feedback.mjs"
+    "feedback": "node services/feedback/scripts/feedback.mjs",
+    "vault:check": "tsx packages/core/scripts/vault-check.ts"
   },
   "devDependencies": {
     "oxlint": "^1.83.0",
     "prettier": "^3.9.8",
+    "tsx": "^4.23.15",
     "typescript": "^7.0.2",
     "vitest": "^5.0.1"
   }

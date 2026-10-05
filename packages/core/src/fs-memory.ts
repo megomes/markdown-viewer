@@ -146,6 +146,56 @@ function bigDocument(sections: number): string {
 }
 
 /** A small PNG, so the demo folder has a real image to draw. */
+/** A corner of a vault the way Obsidian leaves it, to exercise links and embeds. */
+const VAULT_PANEL = `---
+tags: [projeto, painel]
+aliases: [Central]
+status: ativo
+---
+# Painel
+
+Veja [[Manual|o manual]], o mesmo pelo apelido [[Outro Nome]], e um que não existe: [[Inexistente]].
+
+Uma seção de outra nota: [[Manual#Seção dois]].
+
+![[Pasted image 1.png|160]]
+
+![[Manual#Seção dois]]
+
+![[relatorio.pdf]]
+
+> [!info]- Detalhes recolhidos
+> Só aparece quando aberto.
+> Segunda linha.
+
+> [!abstract] Resumo
+> Sempre aberto. %% comentário escondido %%
+
+Um parágrafo com id de bloco. ^bloco-1
+
+\`\`\`mermaid
+graph LR
+  A[Painel] --> B[Manual]
+\`\`\`
+`
+
+const VAULT_MANUAL = `---
+aliases:
+  - Outro Nome
+---
+# Manual
+
+Introdução.
+
+## Seção dois
+
+Texto da seção dois, que aparece embutido no painel.
+
+## Seção três
+
+Fim.
+`
+
 const SAMPLE_IMAGE_BASE64 =
   'iVBORw0KGgoAAAANSUhEUgAAAGAAAABgCAIAAABt+uBvAAADDElEQVR42u3Q5VaUURQG4H1nYneL3Up3d9fQDN1wV/QMOZSCgoCCouecb2aWP779XsG71nMFj/xNunAelXCenPAn+aKVcsm5/DvVuGKlXTXO0q6dpXuuG6cZN5ybp5nGrV9G1m3nzs9s466Vc884se6f5BoPjOO8h86j43zj8ZFR8MRJPCpM/GE9tYqeHVrPD4uNF8ZByUvn1UGp8fq7UfYm5u23cuOdVfHe2K/4sF9pfDT2qj45n/eqra/VSVZNspPypdZIterSjN269N16I8MQ7oCd3YZM4Q7Y2XFB3FF3XBB39J2dhizhDtjZafSCuKPsbDdmC3fATjyIO/472005wh2wY4O4A3a2m3KFO2Bnq9kL4o6ys9WcJ9wBO9Eg7mg7Wy35wh2w44K4o+9sthQId8DOZsAGcUfdiQZxR9vZDBQKd8BOPIg7/juR1iLhDthxQdzRdyKtxcIdsBNpKxbugJ1IW4lwB+xsxIK447+z0V4q3AE7Nog7YGejvUy4A3bWO7wg7ig76x3lwh2wEw3ijraz3lkh3AE7XhB31J01G8QdfWets1K4A3bWulwQd7Sdta4q4Q7YiQdxx39ntbtauAN2XBB39J3V7hrhDthZ7akR7oCd1Z5a4Q7YWYkFccd/ZyVYJ9wBOy6IO/rOSrBeuAN2VnptEHfUneVoEHeUneXeBuEO2LFB3AE7y32Nwh2wE7ZB3NF3wn1Nwh2wE+53QdzRdsL9zcIdsBMP4o7/TmigRbgDdlwQd/Sd0EBAuAN2QoMB4Q7YCQ22CnfAztJ/Qdzx2VkaahPugB0viDvqjg3iDthZGmoX7oCdxWEviDvKzuJwh3AH7ESDuKPtLI50CnfAjgvijr6zMNIl3AE7C6MuiDvazsJot3AH7MSDuOO/Mz/WI9wBOy6IO/rO/FhQuAN25seDwh2wEwvijrIzN94r3AE78SDu+O/MTfQJd8CODeIO2Jmb6BfugJ3ZSS+IO8rO7OSAcAfsRIO4o+3MTg0Kd8COC+KOvjMzNSTcATsz014Qd5Sdmenhf1ZJY6+znbuKAAAAAElFTkSuQmCC'
 
@@ -170,10 +220,19 @@ export class MemoryFileSystem implements FileSystem {
   private readonly loose = new Map<string, MemoryFile>()
 
   /** Folders that exist without holding a file, which paths alone cannot show. */
-  private readonly folders = new Set<string>(['notas', 'imagens'])
+  private readonly folders = new Set<string>([
+    'notas',
+    'imagens',
+    'obsidian',
+    'obsidian/Files',
+    'obsidian/Docs',
+    'obsidian/Projetos',
+  ])
 
   private readonly binaries = new Map<string, Uint8Array>([
     ['imagens/exemplo.png', decodeBase64(SAMPLE_IMAGE_BASE64)],
+    ['obsidian/Files/Pasted image 1.png', decodeBase64(SAMPLE_IMAGE_BASE64)],
+    ['obsidian/Docs/relatorio.pdf', new TextEncoder().encode('%PDF-1.4\n')],
   ])
 
   private readonly files = new Map<string, MemoryFile>([
@@ -182,6 +241,18 @@ export class MemoryFileSystem implements FileSystem {
     ['notas/puro.txt', file(PLAIN)],
     ['leiame.markdown', file('# Leia-me\n\nOutro arquivo.\n')],
     ['grande.md', file(bigDocument(120))],
+    ['obsidian/Projetos/Painel.md', file(VAULT_PANEL)],
+    ['obsidian/Docs/Manual.md', file(VAULT_MANUAL)],
+    [
+      '.obsidian/bookmarks.json',
+      file(
+        '{"items":[{"type":"file","path":"obsidian/Projetos/Painel.md"},{"type":"group","items":[{"type":"file","path":"obsidian/Docs/Manual.md","title":"O manual"}]}]}',
+      ),
+    ],
+    [
+      '.obsidian/plugins/obsidian-icon-folder/data.json',
+      file('{"settings":{},"obsidian":"LiGem","obsidian/Docs":"LiBookOpen","obsidian/Files":"📎"}'),
+    ],
   ])
 
   async openBase(): Promise<Base> {
@@ -214,6 +285,8 @@ export class MemoryFileSystem implements FileSystem {
       const rest = full.slice(prefix.length)
       const slash = rest.indexOf('/')
       const name = slash < 0 ? rest : rest.slice(0, slash)
+      // Hidden like the other adapters hide them: `.obsidian` is the app's, not a note.
+      if (name.startsWith('.')) continue
       if (name === '') continue
       const childPath = joinPath(path, name)
       if (seen.has(childPath)) continue

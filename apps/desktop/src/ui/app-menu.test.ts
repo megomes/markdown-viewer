@@ -55,6 +55,8 @@ describe('o menu do sistema', () => {
   it('Arquivo traz abrir arquivo, pasta e recentes', () => {
     expect(labels(submenu(plan(vazio), 'Arquivo'))).toEqual([
       'Nova nota',
+      'Abrir rápido',
+      'Buscar no vault',
       'Abrir arquivo',
       'Abrir pasta',
       'Abrir recentes',
