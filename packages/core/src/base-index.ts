@@ -12,6 +12,7 @@
  */
 
 import { entryId, isTextFile, type Entry, type FileSystem } from './fs'
+import { htmlTitle } from './html'
 import { readNote, type Heading } from './note'
 import { createResolver, type Resolver } from './resolver'
 
@@ -26,6 +27,8 @@ export interface IndexedFile {
   title: string
   /** Paths inside the base that this file points at, links and embeds alike. */
   links: string[]
+  /** Paths of what the note embeds with `![[…]]` or `![](…)`, in order. */
+  embeds: string[]
   aliases: string[]
   tags: string[]
   properties: Record<string, unknown>
@@ -60,9 +63,13 @@ const BATCH = 8
 /** Folders that belong to tools, not to the notes. */
 const SKIPPED = new Set(['.obsidian', '.git', '.trash', 'node_modules', '.markdown-viewer'])
 
+function isHtml(name: string): boolean {
+  return /\.html?$/i.test(name)
+}
+
 /** Only Markdown carries links, aliases and properties; a .txt is plain text. */
 function isNote(name: string): boolean {
-  return /.(md|markdown)$/i.test(name)
+  return /\.(md|markdown)$/i.test(name)
 }
 
 async function collect(
@@ -113,7 +120,8 @@ export async function buildIndex(
 ): Promise<BaseIndex> {
   const all: Entry[] = []
   await collect(source, baseId, '', all)
-  const entries = all.filter((entry) => isTextFile(entry.name))
+  // HTML pages enter too: they are first-class here, with a title and backlinks.
+  const entries = all.filter((entry) => isTextFile(entry.name) || isHtml(entry.name))
 
   const index: BaseIndex = {
     ...EMPTY_INDEX,
@@ -124,7 +132,7 @@ export async function buildIndex(
   }
   onProgress({ ...index })
 
-  const raw = new Map<string, string[]>()
+  const raw = new Map<string, { target: string; embed: boolean }[]>()
 
   for (let start = 0; start < entries.length; start += BATCH) {
     if (shouldStop()) return index
@@ -136,13 +144,26 @@ export async function buildIndex(
           if (stamp && stamp.size > MAX_BYTES) return
           const { text } = await source.read(baseId, entry.path)
           const note = isNote(entry.name) ? readNote(text) : null
-          raw.set(entry.path, note ? note.links.map((link) => link.target).filter(Boolean) : [])
+          raw.set(
+            entry.path,
+            note
+              ? note.links
+                  .filter((link) => link.target)
+                  .map((link) => ({
+                    target: link.target,
+                    embed: link.kind === 'embed' || link.kind === 'markdown-image',
+                  }))
+              : [],
+          )
           index.files[entry.id] = {
             baseId,
             path: entry.path,
             name: entry.name,
-            title: note?.headings[0]?.text ?? entry.name,
+            title: isHtml(entry.name)
+              ? (htmlTitle(text) ?? entry.name)
+              : (note?.headings[0]?.text ?? entry.name),
             links: [],
+            embeds: [],
             aliases: note?.aliases ?? [],
             tags: note?.tags ?? [],
             properties: note?.properties ?? {},
@@ -169,8 +190,9 @@ export async function buildIndex(
     if (!file) continue
 
     const seen = new Set<string>()
-    for (const target of targets) {
+    for (const { target, embed } of targets) {
       const resolved = resolver.resolve(target, path)
+      if (resolved && embed) file.embeds.push(resolved)
       if (!resolved || resolved === path || seen.has(resolved)) continue
       seen.add(resolved)
       file.links.push(resolved)

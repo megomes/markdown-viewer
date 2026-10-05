@@ -1,0 +1,301 @@
+/* The viewers: HTML, PDF, image, code and Bases, inside the editor's pane. */
+
+.viewer {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  min-height: 0;
+  background: var(--bg-content);
+}
+
+.viewer-bar {
+  display: flex;
+  flex: none;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
+  padding: 6px 12px;
+  border-bottom: 1px solid var(--border-subtle);
+  font-size: 12.5px;
+}
+
+.viewer-name {
+  overflow: hidden;
+  flex: 1;
+  min-width: 80px;
+  color: var(--text-secondary);
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.viewer-note,
+.viewer-pages {
+  color: var(--text-tertiary);
+}
+
+.viewer-pages {
+  display: inline-flex;
+  gap: 6px;
+  align-items: center;
+}
+
+.viewer-page,
+.viewer-find {
+  padding: 3px 7px;
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-sm);
+  outline: 0;
+  background: var(--surface-1);
+  color: var(--text-primary);
+  font: inherit;
+}
+
+.viewer-page {
+  width: 3.5em;
+  text-align: center;
+}
+
+.viewer-find {
+  width: 160px;
+}
+
+.viewer-page:focus,
+.viewer-find:focus {
+  border-color: var(--accent);
+}
+
+.viewer-action {
+  padding: 3px 9px;
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-sm);
+  background: var(--surface-2);
+  color: var(--text-secondary);
+  font: inherit;
+  cursor: pointer;
+}
+
+.viewer-action:hover {
+  border-color: var(--border-emphasis);
+  color: var(--text-primary);
+}
+
+.viewer-seg {
+  display: inline-flex;
+  gap: 2px;
+  padding: 2px;
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-md);
+  background: var(--surface-2);
+}
+
+.viewer-seg button {
+  padding: 3px 10px;
+  border: 0;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--text-tertiary);
+  font: inherit;
+  cursor: pointer;
+}
+
+.viewer-seg button[aria-pressed='true'] {
+  background: var(--surface-hover);
+  color: var(--text-primary);
+}
+
+.viewer-status {
+  margin: 12px 16px;
+  color: var(--text-tertiary);
+  font-size: 13px;
+}
+
+.viewer-status.is-error {
+  color: var(--tone-red);
+}
+
+/* An HTML page keeps its own look: white unless it paints its own background. */
+.viewer-frame {
+  flex: 1;
+  width: 100%;
+  border: 0;
+  background: #fff;
+}
+
+.viewer-code {
+  flex: 1;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.viewer-code .cm-editor {
+  height: 100%;
+}
+
+.viewer-image {
+  display: flex;
+  flex: 1;
+  align-items: center;
+  justify-content: center;
+  overflow: auto;
+  padding: 16px;
+  cursor: zoom-in;
+}
+
+.viewer-image img {
+  max-width: 100%;
+  max-height: 100%;
+  object-fit: contain;
+}
+
+.viewer-image.is-actual {
+  align-items: flex-start;
+  justify-content: flex-start;
+  cursor: zoom-out;
+}
+
+.viewer-image.is-actual img {
+  max-width: none;
+  max-height: none;
+}
+
+/* pdf.js wants an absolutely positioned scroller around its pages. */
+.viewer-pdf-frame {
+  position: relative;
+  flex: 1;
+  min-height: 0;
+}
+
+.viewer-pdf {
+  position: absolute;
+  inset: 0;
+  overflow: auto;
+  background: var(--surface-2);
+}
+
+.viewer-pdf > .pdfViewer {
+  padding: 12px 0;
+}
+
+.viewer-pdf .page {
+  margin: 0 auto 12px;
+  box-shadow: 0 1px 6px rgb(0 0 0 / 0.25);
+}
+
+/* Bases */
+
+.base-body {
+  flex: 1;
+  overflow: auto;
+  padding: 12px 20px 40px;
+}
+
+.base-group {
+  margin-bottom: 22px;
+}
+
+.base-group-title {
+  margin: 0 0 8px;
+  color: var(--text-primary);
+  font-size: 14px;
+  font-weight: 650;
+}
+
+.base-group-title span {
+  margin-left: 6px;
+  color: var(--text-tertiary);
+  font-weight: 400;
+}
+
+.base-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13px;
+}
+
+.base-table th {
+  position: sticky;
+  top: 0;
+  padding: 6px 10px;
+  border-bottom: 1px solid var(--border-default);
+  background: var(--bg-content);
+  color: var(--text-tertiary);
+  font-weight: 600;
+  text-align: left;
+  white-space: nowrap;
+}
+
+.base-table td {
+  max-width: 420px;
+  padding: 6px 10px;
+  border-bottom: 1px solid var(--border-subtle);
+  color: var(--text-secondary);
+  vertical-align: top;
+}
+
+.base-table td:first-child {
+  color: var(--text-primary);
+  font-weight: 500;
+}
+
+.base-table tbody tr {
+  cursor: pointer;
+}
+
+.base-table tbody tr:hover td {
+  background: var(--surface-hover);
+}
+
+.base-check {
+  color: var(--text-tertiary);
+}
+
+.base-cards {
+  display: grid;
+  gap: 12px;
+  grid-template-columns: repeat(auto-fill, minmax(170px, 1fr));
+}
+
+.base-card {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  overflow: hidden;
+  padding: 0 0 10px;
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-lg);
+  background: var(--surface-1);
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.base-card:hover {
+  border-color: var(--border-emphasis);
+}
+
+.base-cover {
+  width: 100%;
+  aspect-ratio: 4 / 3;
+  background: var(--surface-2);
+  object-fit: cover;
+}
+
+.base-card-title {
+  padding: 4px 10px 0;
+  color: var(--text-primary);
+  font-weight: 600;
+  font-size: 13px;
+}
+
+.base-card-field {
+  display: flex;
+  gap: 6px;
+  padding: 0 10px;
+  color: var(--text-secondary);
+  font-size: 12px;
+}
+
+.base-card-field > span:first-child {
+  color: var(--text-tertiary);
+}

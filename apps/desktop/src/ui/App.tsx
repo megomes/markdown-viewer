@@ -20,7 +20,8 @@ import { on, send, type LiveDoc } from '~/platform/channel'
 import { useDock } from './useDock'
 import { onTrayNewNote } from '~/platform/tray'
 import { DEFAULTS, LIMITS, useSettings } from '~/app/settings'
-import { useWorkspace, type Doc, type RenameTarget, type Tab } from '~/app/store'
+import { tabViewer, useWorkspace, type Doc, type RenameTarget, type Tab } from '~/app/store'
+import { Viewer } from './viewers/Viewer'
 import { entryId, nativeBaseName, parentPath, type Entry } from '@markdown-viewer/core/fs'
 import type { Heading } from '~/editor/outline'
 import { EditorView, type Command } from '@codemirror/view'
@@ -1296,7 +1297,18 @@ export function App() {
           </header>
         )}
 
-        {activeTab && activeDoc ? (
+        {activeTab && tabViewer(activeTab) !== 'note' ? (
+          <div className="workspace-body">
+            <Viewer
+              kind={tabViewer(activeTab) as Exclude<ReturnType<typeof tabViewer>, 'note'>}
+              baseId={activeTab.baseId}
+              path={activeTab.path}
+              name={activeTab.name}
+              index={state.index[activeTab.baseId]}
+              report={setNotice}
+            />
+          </div>
+        ) : activeTab && activeDoc ? (
           <>
             <div className="workspace-body">
               <EditorPane

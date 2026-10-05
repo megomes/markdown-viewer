@@ -24,6 +24,8 @@ import {
   baseName,
   entryId,
   isPlainText,
+  viewerOf,
+  type Viewer,
   joinPath,
   parentPath,
   type Base,
@@ -521,7 +523,7 @@ export function useWorkspace() {
         type: 'recents/set',
         recents: rememberFile({ baseId: entry.baseId, path: entry.path, name: entry.name }),
       })
-      if (latest.current.docs[entry.id]) return
+      if (latest.current.docs[entry.id] || viewerOf(entry.name) !== 'note') return
       try {
         const loaded = await fileSystem().read(entry.baseId, entry.path)
         dispatch({
@@ -904,6 +906,7 @@ export function useWorkspace() {
         })
         dispatch({ type: 'recents/set', recents: rememberFile(file) })
         if (latest.current.docs[id]) return
+        if (file.path !== '' && viewerOf(file.name) !== 'note') return
         const loaded = await fileSystem().read(file.baseId, file.path)
         dispatch({
           type: 'doc/loaded',
@@ -1125,6 +1128,13 @@ export function useWorkspace() {
       for (const tab of session.tabs) {
         if (!available.has(tab.baseId)) continue
         try {
+          // A viewer tab has no document: it only has to still exist.
+          if (tab.path !== '' && viewerOf(tab.name) !== 'note') {
+            if (!(await fileSystem().stat(tab.baseId, tab.path))) continue
+            restoredIds.push(tab.id)
+            dispatch({ type: 'tab/opened', tab: toTab(tab) })
+            continue
+          }
           const loaded = await fileSystem().read(tab.baseId, tab.path)
           restoredIds.push(tab.id)
           dispatch({ type: 'tab/opened', tab: toTab(tab) })
@@ -1140,7 +1150,8 @@ export function useWorkspace() {
 
       if (
         session.activeId &&
-        latest.current.docs[session.activeId] &&
+        (latest.current.docs[session.activeId] ||
+          latest.current.tabs.some((tab) => tab.id === session.activeId)) &&
         restoreMayChooseActive(latest.current.activeId, restoredIds)
       ) {
         dispatch({ type: 'tab/activated', id: session.activeId })
@@ -1253,6 +1264,12 @@ function remapId(
 ): string {
   const [base, path] = splitEntryId(id)
   return base === baseId && under(path) ? entryId(base, moved(path)) : id
+}
+
+/** How a tab is shown: the editor for notes, drafts and loose files, a viewer for the rest. */
+export function tabViewer(tab: Tab): Viewer {
+  if (tab.path === '' || isDraft(tab)) return 'note'
+  return viewerOf(tab.name) ?? 'note'
 }
 
 export function isPlainTextTab(tab: Tab): boolean {

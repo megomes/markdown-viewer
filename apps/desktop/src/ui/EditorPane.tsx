@@ -81,6 +81,12 @@ export function EditorPane({
     const parent = host.current
     if (!parent) return
 
+    // Declared before the editor exists: building it, and the scroll that
+    // follows, already run the listener that reads these.
+    let headings: Heading[] | null = null
+    let outlineTimer = 0
+    let timer = 0
+
     const extensions = [
       ...editorExtensions({
         title: tab.name,
@@ -147,8 +153,6 @@ export function EditorPane({
      * look like a document that had already been reported, and the panel went
      * on showing the headings of the file before it.
      */
-    let headings: Heading[] | null = null
-    let outlineTimer = 0
     function publishOutline(): void {
       window.clearTimeout(outlineTimer)
       outlineTimer = window.setTimeout(() => {
@@ -162,7 +166,6 @@ export function EditorPane({
     }
     publishOutline()
 
-    let timer = 0
     function report(): void {
       window.clearTimeout(timer)
       timer = window.setTimeout(() => {

@@ -10,7 +10,7 @@
 import { useEffect, useRef, type RefObject } from 'react'
 import type { EditorView } from '@codemirror/view'
 import { resolverOf, type BaseIndex } from '@markdown-viewer/core/base-index'
-import { entryId, isTextFile } from '@markdown-viewer/core/fs'
+import { entryId, viewerOf } from '@markdown-viewer/core/fs'
 import { sameHeading } from '@markdown-viewer/core/note'
 import { fileSystem, isDesktop } from '~/platform'
 import { linksChanged, setLinkOpener, setVaultResolver, type LinkTarget } from '~/editor/links'
@@ -85,7 +85,7 @@ export function useVaultLinks({ indexes, editor, activeTab, headings, openText, 
     setLinkOpener((target: LinkTarget) => {
       const { activeTab: tab, openText: open, report: say } = latest.current
       const name = target.path.slice(target.path.lastIndexOf('/') + 1)
-      if (!isTextFile(name)) {
+      if (!viewerOf(name)) {
         void openOutside(target.baseId, target.path).then((ok) => {
           if (!ok) say('Este tipo de arquivo ainda não abre aqui: ' + name)
         })

@@ -1,5 +1,5 @@
 import { memo, useEffect, useRef } from 'react'
-import { isPlainText, isTextFile, type Entry } from '@markdown-viewer/core/fs'
+import { isPlainText, isTextFile, viewerOf, type Entry } from '@markdown-viewer/core/fs'
 import { ChevronIcon, FileIcon, FolderIcon, MarkdownIcon } from './icons'
 import { NamedIcon } from './NamedIcon'
 
@@ -64,7 +64,8 @@ export const FileTree = memo(function FileTree({
 }: Props) {
   const filter = data.filter.trim().toLowerCase()
   const entries = (data.children[parentId] ?? []).filter((entry) => {
-    if (entry.kind === 'file' && !showAllFiles && !isTextFile(entry.name)) return false
+    // Notes and everything the app can show; the rest only when asked for.
+    if (entry.kind === 'file' && !showAllFiles && !viewerOf(entry.name)) return false
     return filter === '' || matchesFilter(data, entry, filter)
   })
 
@@ -72,7 +73,7 @@ export const FileTree = memo(function FileTree({
     <ul className={'tree' + (depth > 0 ? ' is-nested' : '')} role="group">
       {entries.map((entry) => {
         const open = data.expanded[entry.id] === true
-        const readable = entry.kind === 'directory' || isTextFile(entry.name)
+        const readable = entry.kind === 'directory' || viewerOf(entry.name) !== null
         const openEntry = (preview: boolean) => {
           if (entry.kind === 'directory') on.onToggleFolder(entry)
           else if (readable) on.onOpenFile(entry, preview)

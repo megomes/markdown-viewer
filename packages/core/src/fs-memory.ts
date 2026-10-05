@@ -196,6 +196,20 @@ Texto da seção dois, que aparece embutido no painel.
 Fim.
 `
 
+/** One page that says "Relatorio de exemplo", enough for the PDF viewer. */
+const MINIMAL_PDF = [
+  '%PDF-1.4',
+  '1 0 obj << /Type /Catalog /Pages 2 0 R >> endobj',
+  '2 0 obj << /Type /Pages /Kids [3 0 R] /Count 1 >> endobj',
+  '3 0 obj << /Type /Page /Parent 2 0 R /MediaBox [0 0 300 200] /Contents 4 0 R /Resources << /Font << /F1 5 0 R >> >> >> endobj',
+  '4 0 obj << /Length 52 >> stream',
+  'BT /F1 18 Tf 30 100 Td (Relatorio de exemplo) Tj ET',
+  'endstream endobj',
+  '5 0 obj << /Type /Font /Subtype /Type1 /BaseFont /Helvetica >> endobj',
+  'trailer << /Root 1 0 R >>',
+  '%%EOF',
+].join('\n')
+
 const SAMPLE_IMAGE_BASE64 =
   'iVBORw0KGgoAAAANSUhEUgAAAGAAAABgCAIAAABt+uBvAAADDElEQVR42u3Q5VaUURQG4H1nYneL3Up3d9fQDN1wV/QMOZSCgoCCouecb2aWP779XsG71nMFj/xNunAelXCenPAn+aKVcsm5/DvVuGKlXTXO0q6dpXuuG6cZN5ybp5nGrV9G1m3nzs9s466Vc884se6f5BoPjOO8h86j43zj8ZFR8MRJPCpM/GE9tYqeHVrPD4uNF8ZByUvn1UGp8fq7UfYm5u23cuOdVfHe2K/4sF9pfDT2qj45n/eqra/VSVZNspPypdZIterSjN269N16I8MQ7oCd3YZM4Q7Y2XFB3FF3XBB39J2dhizhDtjZafSCuKPsbDdmC3fATjyIO/472005wh2wY4O4A3a2m3KFO2Bnq9kL4o6ys9WcJ9wBO9Eg7mg7Wy35wh2w44K4o+9sthQId8DOZsAGcUfdiQZxR9vZDBQKd8BOPIg7/juR1iLhDthxQdzRdyKtxcIdsBNpKxbugJ1IW4lwB+xsxIK447+z0V4q3AE7Nog7YGejvUy4A3bWO7wg7ig76x3lwh2wEw3ijraz3lkh3AE7XhB31J01G8QdfWets1K4A3bWulwQd7Sdta4q4Q7YiQdxx39ntbtauAN2XBB39J3V7hrhDthZ7akR7oCd1Z5a4Q7YWYkFccd/ZyVYJ9wBOy6IO/rOSrBeuAN2VnptEHfUneVoEHeUneXeBuEO2LFB3AE7y32Nwh2wE7ZB3NF3wn1Nwh2wE+53QdzRdsL9zcIdsBMP4o7/TmigRbgDdlwQd/Sd0EBAuAN2QoMB4Q7YCQ22CnfAztJ/Qdzx2VkaahPugB0viDvqjg3iDthZGmoX7oCdxWEviDvKzuJwh3AH7ESDuKPtLI50CnfAjgvijr6zMNIl3AE7C6MuiDvazsJot3AH7MSDuOO/Mz/WI9wBOy6IO/rO/FhQuAN25seDwh2wEwvijrIzN94r3AE78SDu+O/MTfQJd8CODeIO2Jmb6BfugJ3ZSS+IO8rO7OSAcAfsRIO4o+3MTg0Kd8COC+KOvjMzNSTcATsz014Qd5Sdmenhf1ZJY6+znbuKAAAAAElFTkSuQmCC'
 
@@ -227,12 +241,15 @@ export class MemoryFileSystem implements FileSystem {
     'obsidian/Files',
     'obsidian/Docs',
     'obsidian/Projetos',
+    'obsidian/Trackers',
+    'obsidian/Livros',
+    'obsidian/scripts',
   ])
 
   private readonly binaries = new Map<string, Uint8Array>([
     ['imagens/exemplo.png', decodeBase64(SAMPLE_IMAGE_BASE64)],
     ['obsidian/Files/Pasted image 1.png', decodeBase64(SAMPLE_IMAGE_BASE64)],
-    ['obsidian/Docs/relatorio.pdf', new TextEncoder().encode('%PDF-1.4\n')],
+    ['obsidian/Docs/relatorio.pdf', new TextEncoder().encode(MINIMAL_PDF)],
   ])
 
   private readonly files = new Map<string, MemoryFile>([
@@ -243,6 +260,44 @@ export class MemoryFileSystem implements FileSystem {
     ['grande.md', file(bigDocument(120))],
     ['obsidian/Projetos/Painel.md', file(VAULT_PANEL)],
     ['obsidian/Docs/Manual.md', file(VAULT_MANUAL)],
+    [
+      'obsidian/Trackers/Tracker.html',
+      file(
+        '<!doctype html><html><head><title>Tracker de treino</title></head><body>' +
+          '<h1>Tracker de treino</h1><p>Missões feitas: <b id="n">0</b></p>' +
+          '<button id="mais">+1</button> <a href="../Docs/Manual.md#Seção dois">Ver o manual</a>' +
+          '<script>var n=Number(localStorage.getItem("feitas")||0);' +
+          'document.getElementById("n").textContent=n;' +
+          'document.getElementById("mais").onclick=function(){n++;localStorage.setItem("feitas",String(n));' +
+          'document.getElementById("n").textContent=n};</script></body></html>',
+      ),
+    ],
+    [
+      'obsidian/Livros.base',
+      file(
+        'filters:\n  and:\n    - file.hasTag("livro")\nformulas:\n  ordem: if(prioridade >= 0, prioridade, 99)\n' +
+          'properties:\n  file.name:\n    displayName: Livro\nviews:\n  - type: table\n    name: Por tipo\n' +
+          '    groupBy:\n      property: tipo\n      direction: ASC\n    order: [file.name, autor, prioridade, lido]\n' +
+          '    sort:\n      - property: formula.ordem\n        direction: ASC\n  - type: cards\n    name: Capas\n' +
+          '    image: file.embeds[0]\n    order: [file.name, autor]\n',
+      ),
+    ],
+    [
+      'obsidian/Livros/Duna.md',
+      file(
+        '---\ntags: [livro]\ntipo: Ficção\nautor: Frank Herbert\nprioridade: 1\nlido: false\n---\n![[Pasted image 1.png]]\n',
+      ),
+    ],
+    [
+      'obsidian/Livros/Sapiens.md',
+      file('---\ntags: [livro]\ntipo: Ensaio\nautor: Yuval Harari\nlido: true\n---\n# Sapiens\n'),
+    ],
+    [
+      'obsidian/scripts/exemplo.py',
+      file(
+        'def soma(a, b):\n    """Soma dois números."""\n    return a + b\n\nprint(soma(2, 3))\n',
+      ),
+    ],
     [
       '.obsidian/bookmarks.json',
       file(

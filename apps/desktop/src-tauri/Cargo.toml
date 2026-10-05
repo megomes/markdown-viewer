@@ -30,7 +30,7 @@ log = "0.4"
 # the note that floats out would have square corners on a rectangle nobody
 # asked for. It goes with `macOSPrivateApi` in `tauri.conf.json`, and it is
 # the one thing here that would stop this app being sold in the App Store.
-tauri = { version = "2.11.3", features = ["tray-icon", "macos-private-api"] }
+tauri = { version = "2.11.3", features = ["tray-icon", "macos-private-api", "protocol-asset"] }
 tauri-plugin-log = "2"
 tauri-plugin-fs = "2"
 tauri-plugin-opener = "2"

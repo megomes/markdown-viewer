@@ -21,7 +21,8 @@
     "format": "prettier --write .",
     "format:check": "prettier --check .",
     "feedback": "node services/feedback/scripts/feedback.mjs",
-    "vault:check": "tsx packages/core/scripts/vault-check.ts"
+    "vault:check": "tsx packages/core/scripts/vault-check.ts",
+    "base:check": "tsx packages/core/scripts/base-check.ts"
   },
   "devDependencies": {
     "oxlint": "^1.83.0",

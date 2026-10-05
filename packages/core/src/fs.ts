@@ -142,6 +142,81 @@ export function isPlainText(name: string): boolean {
   return name.toLowerCase().endsWith('.txt')
 }
 
+/**
+ * How the app shows a file. `note` is the editor; the rest are viewers. Null is
+ * a file the app does not open itself and hands to the system.
+ */
+export type Viewer = 'note' | 'html' | 'pdf' | 'image' | 'code' | 'base'
+
+const VIEWERS: Record<string, Viewer> = {
+  html: 'html',
+  htm: 'html',
+  pdf: 'pdf',
+  base: 'base',
+}
+for (const ext of ['png', 'jpg', 'jpeg', 'gif', 'webp', 'svg', 'avif', 'bmp', 'ico']) {
+  VIEWERS[ext] = 'image'
+}
+for (const ext of [
+  'json',
+  'js',
+  'mjs',
+  'cjs',
+  'ts',
+  'tsx',
+  'jsx',
+  'css',
+  'scss',
+  'py',
+  'lua',
+  'yaml',
+  'yml',
+  'toml',
+  'ini',
+  'cfg',
+  'conf',
+  'xml',
+  'sh',
+  'bash',
+  'ps1',
+  'bat',
+  'cmd',
+  'sql',
+  'c',
+  'h',
+  'cpp',
+  'hpp',
+  'cs',
+  'rs',
+  'go',
+  'java',
+  'kt',
+  'swift',
+  'rb',
+  'php',
+  'r',
+  'csv',
+  'tsv',
+  'log',
+  'env',
+  'gitignore',
+  'dockerfile',
+  'makefile',
+  'tex',
+  'vue',
+  'svelte',
+]) {
+  VIEWERS[ext] = 'code'
+}
+
+export function viewerOf(name: string): Viewer | null {
+  if (isTextFile(name)) return 'note'
+  const lower = name.toLowerCase()
+  const dot = lower.lastIndexOf('.')
+  const ext = dot < 0 ? lower : lower.slice(dot + 1)
+  return VIEWERS[ext] ?? null
+}
+
 export function entryId(baseId: string, path: string): string {
   return baseId + ':' + path
 }

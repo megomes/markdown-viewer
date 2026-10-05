@@ -8,6 +8,7 @@
 
 import type { BaseIndex } from '@markdown-viewer/core/base-index'
 import type { SearchDoc } from '@markdown-viewer/core/search'
+import { htmlText } from '@markdown-viewer/core/html'
 import { fileSystem } from '~/platform'
 
 const cache = new WeakMap<BaseIndex, Promise<SearchDoc[]>>()
@@ -27,7 +28,7 @@ export function searchDocs(index: BaseIndex): Promise<SearchDoc[]> {
               docs.push({
                 path: file.path,
                 title: file.title,
-                text,
+                text: /\.html?$/i.test(file.path) ? htmlText(text) : text,
                 tags: file.tags,
                 aliases: file.aliases,
               })

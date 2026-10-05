@@ -1,0 +1,95 @@
+/**
+ * Turns an HTML file into the document the viewer's frame shows.
+ *
+ * Two things are put in before anything the page has:
+ * - `<base href>`, pointing at the file's folder, so the page finds its CSS,
+ *   scripts and images where it always did;
+ * - a script that replaces `localStorage` and `sessionStorage` (the frame is
+ *   sandboxed and has none) and intercepts clicks on links. Every change to
+ *   `localStorage` goes to the app in a message; a click on a link to another
+ *   vault file asks the app to open it instead of loading it inside the frame.
+ *
+ * The page is never changed on disk.
+ */
+
+/** Messages from the frame. The `__mdv` key keeps them apart from the page's own. */
+export type FrameMessage =
+  { __mdv: 'storage'; storage: Record<string, string> } | { __mdv: 'open'; href: string }
+
+function shim(initial: Record<string, string>): string {
+  // Kept as plain ES5-ish code: it runs inside whatever page this is.
+  return `(function () {
+  var data = ${JSON.stringify(initial).replace(/</g, '\\u003c')};
+  function store(persist) {
+    var map = persist ? data : {};
+    function report() { if (persist) parent.postMessage({ __mdv: 'storage', storage: map }, '*'); }
+    var api = {
+      getItem: function (k) { k = String(k); return Object.prototype.hasOwnProperty.call(map, k) ? map[k] : null; },
+      setItem: function (k, v) { map[String(k)] = String(v); report(); },
+      removeItem: function (k) { delete map[String(k)]; report(); },
+      clear: function () { for (var k in map) delete map[k]; report(); },
+      key: function (i) { return Object.keys(map)[i] ?? null; },
+      get length() { return Object.keys(map).length; }
+    };
+    return new Proxy(api, {
+      get: function (t, p) { return p in t ? t[p] : (typeof p === 'string' && Object.prototype.hasOwnProperty.call(map, p) ? map[p] : undefined); },
+      set: function (t, p, v) { if (p in t) return false; api.setItem(p, v); return true; },
+      deleteProperty: function (t, p) { api.removeItem(p); return true; },
+      has: function (t, p) { return p in t || Object.prototype.hasOwnProperty.call(map, p); },
+      ownKeys: function () { return Object.keys(map); },
+      getOwnPropertyDescriptor: function (t, p) {
+        return Object.prototype.hasOwnProperty.call(map, p) ? { value: map[p], enumerable: true, configurable: true, writable: true } : undefined;
+      }
+    });
+  }
+  try { Object.defineProperty(window, 'localStorage', { value: store(true), configurable: true }); } catch (e) {}
+  try { Object.defineProperty(window, 'sessionStorage', { value: store(false), configurable: true }); } catch (e) {}
+  document.addEventListener('click', function (event) {
+    if (event.defaultPrevented || event.button !== 0) return;
+    var a = event.target && event.target.closest ? event.target.closest('a[href]') : null;
+    if (!a) return;
+    var href = a.getAttribute('href');
+    if (!href || href.charAt(0) === '#' || /^javascript:/i.test(href)) return;
+    event.preventDefault();
+    parent.postMessage({ __mdv: 'open', href: href }, '*');
+  }, true);
+})();`
+}
+
+function escapeAttribute(text: string): string {
+  return text.replace(/&/g, '&amp;').replace(/"/g, '&quot;')
+}
+
+/** The page, with the base and the shim in front of everything else. */
+export function frameDocument(
+  html: string,
+  options: { baseHref: string | null; storage: Record<string, string> },
+): string {
+  const head =
+    (options.baseHref ? `<base href="${escapeAttribute(options.baseHref)}">` : '') +
+    `<script>${shim(options.storage)}</script>`
+
+  // Right after <head>, or after <html>, or at the very top of a fragment.
+  const headTag = /<head(\s[^>]*)?>/i.exec(html)
+  if (headTag) {
+    const at = headTag.index + headTag[0].length
+    return html.slice(0, at) + head + html.slice(at)
+  }
+  const htmlTag = /<html(\s[^>]*)?>/i.exec(html)
+  if (htmlTag) {
+    const at = htmlTag.index + htmlTag[0].length
+    return html.slice(0, at) + '<head>' + head + '</head>' + html.slice(at)
+  }
+  const doctype = /^\s*<!doctype[^>]*>/i.exec(html)
+  const at = doctype ? doctype[0].length : 0
+  return html.slice(0, at) + head + html.slice(at)
+}
+
+/** Whether a message really came from the page in this frame, and is ours. */
+export function isFrameMessage(data: unknown): data is FrameMessage {
+  return (
+    !!data && typeof data === 'object' && typeof (data as { __mdv?: unknown }).__mdv === 'string'
+  )
+}
+
+export { htmlText, htmlTitle } from '@markdown-viewer/core/html'
