@@ -277,9 +277,8 @@ ao Claude o que ele não consegue sozinho com busca de texto.
 | `query_base`                   | Roda uma `.base` e devolve as linhas                                          |
 | `list_tags`, `list_properties` | Vocabulário do vault, com contagem e valores                                  |
 | `rename`                       | Renomeia ou move um arquivo e atualiza todos os links                         |
-| `comments_list`                | Comentários abertos, filtrando por arquivo ou pasta                           |
-| `comment_reply`                | Responde a um comentário                                                      |
-| `comment_resolve`              | Marca um comentário como resolvido                                            |
+| `comments_list`                | Itens de revisão pendentes, no formato do "Copiar tudo" do Revisor            |
+| `comment_applied`              | Marca um item como aplicado, com nota opcional                                |
 
 Os índices em `_meta/` continuam existindo. O MCP não os substitui.
 
@@ -289,30 +288,66 @@ ponte quando estiver ligado. Fica para depois.
 
 ### 6.7 Comentários para o Claude
 
-O Matheus lê, marca um trecho e escreve o que quer mudado. Os comentários viram uma
-fila que o Claude lê e responde. É o que o Revisor Visual faz hoje no navegador, trazido
-para dentro do app e para todos os aparelhos.
+O Matheus lê, marca um trecho e escreve o que quer mudado. O Claude aplica, e o
+Matheus confere na própria página se ficou. É o ciclo do
+[Revisor Visual](https://github.com/megomes/revisor-visual), trazido para dentro do app e
+para todos os aparelhos.
 
-- **Em HTML**, pelo **Revisor Visual embutido** no visualizador. O código vem de
-  `C:\Users\mathe\Code\revisor-visual` e passa a viver no monorepo como pacote, de onde
-  a extensão de navegador também é gerada, para não haver duas cópias. Uma camada fina
-  troca o armazenamento da extensão pelo armazenamento de comentários do app.
-- **Em Markdown**, selecionando o trecho na nota, no editor do desktop e no leitor do
-  celular.
-- **No toque**, sem tecla Alt: um botão liga o modo revisão, e nele o toque anota (é o
-  modo "clique simples anota" que o Revisor já tem). Pressionar e segurar sobe na árvore
-  de elementos.
-- **Âncora**: o texto citado, com um pedaço antes e depois para desempatar; em HTML,
-  também o caminho CSS, como o Revisor já faz. Se o Claude reescrever e a âncora sumir,
-  o marcador fica cinza e o comentário continua na lista.
-- **Estado**: aberto, respondido, resolvido. O Claude responde no próprio comentário,
-  e a conversa pode continuar.
-- **Onde fica**: em `.markdown-viewer/comments/<caminho do arquivo>.json`. É arquivo do
-  vault, então sincroniza criptografado e o Claude Code consegue ler mesmo sem o MCP.
-  Renomear o arquivo move os comentários junto.
-- **Exportar**: o "Copiar tudo" do Revisor continua existindo, no mesmo formato, para
-  colar em qualquer Claude.
-- O app mostra quantos comentários estão abertos e quais o Claude respondeu.
+**O Revisor continua sendo um projeto próprio**, no repositório dele, e anda no ritmo
+dele. O app não copia o código: roda o arquivo que cada release do Revisor publica.
+
+**O que o Revisor já tem e o app herda:** sessões de revisão, numeração corrida entre
+páginas, âncora por texto com caminho CSS para desempatar, marcador cinza quando o
+ponto some, foto de cada item no momento em que foi marcado, histórico de sessões, a
+conferência item a item (ficou ou não ficou) e o "Copiar tudo" no formato que o Claude
+já entende.
+
+**O contrato entre os dois.** O Revisor passa a aceitar um anfitrião, que faz por ele o
+que hoje a extensão faz. A extensão vira um anfitrião, e o app vira outro:
+
+| O anfitrião fornece     | Na extensão             | No app                                                 |
+| ----------------------- | ----------------------- | ------------------------------------------------------ |
+| Identidade da página    | URL                     | Caminho no vault, igual em todos os aparelhos          |
+| Estado da sessão        | `chrome.storage.local`  | Arquivo em `.markdown-viewer/revisor/`, sincronizado   |
+| Histórico e conferência | IndexedDB               | Arquivos em `.markdown-viewer/revisor/`, sincronizados |
+| Foto do item            | `captureVisibleTab`     | Captura do visualizador feita pelo app                 |
+| Ligar e desligar        | Botão da barra e atalho | Botão do visualizador                                  |
+| Contador                | Badge do ícone          | Badge do app                                           |
+| Exportar                | Área de transferência   | Área de transferência e fila do MCP                    |
+| Modo de entrada         | Mouse com Alt           | Mouse com Alt no desktop, toque no celular             |
+
+O formato dos dados tem versão e pertence ao Revisor. As sessões ficam gravadas no
+vault por tempo indefinido, então cada release do Revisor sabe ler as anteriores. A
+migração mora no Revisor, junto de quem muda o formato.
+
+**Cada release do Revisor publica um `revisor-embed.js`**, ao lado dos pacotes da
+extensão, gerado do mesmo código e sem nenhuma chamada a `chrome.*`. O arquivo declara a
+versão do contrato que implementa.
+
+**Atualização, só quando o Matheus pede.** Em Configurações, um botão "Atualizar
+Revisor" busca o `revisor-embed.js` da última release pública no GitHub. O app:
+
+1. confere se a versão do contrato é compatível com a dele, e recusa a que não for;
+2. grava o arquivo em `.markdown-viewer/revisor/`, de onde ele sincroniza para os outros
+   aparelhos, de modo que um clique atualiza todos;
+3. guarda a versão anterior, com um botão para voltar a ela.
+
+Cada versão do app também traz uma cópia do Revisor embutida, usada quando não há
+versão baixada ou quando a baixada é incompatível com aquele aparelho.
+
+**Onde se comenta:**
+
+- **HTML**: o Revisor dentro do visualizador.
+- **Markdown**: selecionando o trecho na nota, no editor do desktop e no leitor do
+  celular. O item entra na mesma sessão, no mesmo formato e no mesmo "Copiar tudo" dos
+  itens de HTML, com o título da seção no lugar do caminho CSS.
+- **No toque**: um botão liga o modo revisão, e nele o toque anota (o modo "clique
+  simples anota" que o Revisor já tem).
+
+**O Claude no ciclo.** Pelo MCP ele lista os itens pendentes, lê no formato do "Copiar
+tudo", aplica e marca cada item como aplicado, com uma nota curta quando não conseguiu
+ou decidiu diferente. A conferência continua sendo do Matheus. A nota do Claude é um
+campo novo, opcional, a propor no formato do Revisor.
 
 ### 6.8 App Android de leitura
 
@@ -331,16 +366,16 @@ Celular e tablet, só leitura nesta primeira versão.
 
 **Monorepo**, com npm workspaces:
 
-| Pasta              | Conteúdo                                                                                                         |
-| ------------------ | ---------------------------------------------------------------------------------------------------------------- |
-| `apps/desktop`     | O app Tauri atual                                                                                                |
-| `apps/mobile`      | O app Expo. O editor e o leitor entram como DOM components (`"use dom"`), reaproveitando o CodeMirror do desktop |
-| `packages/core`    | Dialeto Markdown do Obsidian, índice, resolução de links, Bases                                                  |
-| `packages/sync`    | Motor de sync: chunking, merge, fila, protocolo                                                                  |
-| `packages/crypto`  | Chaves e criptografia sobre libsodium                                                                            |
-| `packages/revisor` | O Revisor Visual, de onde sai a extensão e o modo embutido                                                       |
-| `packages/mcp`     | O servidor MCP do vault                                                                                          |
-| `services/sync`    | Worker e Durable Object da Cloudflare                                                                            |
+| Pasta                   | Conteúdo                                                                                                         |
+| ----------------------- | ---------------------------------------------------------------------------------------------------------------- |
+| `apps/desktop`          | O app Tauri atual                                                                                                |
+| `apps/mobile`           | O app Expo. O editor e o leitor entram como DOM components (`"use dom"`), reaproveitando o CodeMirror do desktop |
+| `packages/core`         | Dialeto Markdown do Obsidian, índice, resolução de links, Bases                                                  |
+| `packages/sync`         | Motor de sync: chunking, merge, fila, protocolo                                                                  |
+| `packages/crypto`       | Chaves e criptografia sobre libsodium                                                                            |
+| `packages/revisor-host` | O anfitrião do Revisor Visual no app. O Revisor em si vem das releases dele (seção 6.7)                          |
+| `packages/mcp`          | O servidor MCP do vault                                                                                          |
+| `services/sync`         | Worker e Durable Object da Cloudflare                                                                            |
 
 O motor de sync e o índice são TypeScript puro, sem depender de Tauri nem de Expo. Cada
 app fornece só a camada de arquivo, de cofre de chave e de rede.
@@ -351,8 +386,8 @@ app fornece só a camada de arquivo, de cofre de chave e de rede.
 - Android: os arquivos na área privada do app e um SQLite (expo-sqlite) com o estado do
   sync e o índice. Chave no `expo-secure-store`.
 
-**Pasta `.markdown-viewer/`** na raiz do vault: estado dos HTML, comentários, regras de
-ignorar. O Obsidian esconde pastas que começam com ponto. O nome muda quando o app ganhar
+**Pasta `.markdown-viewer/`** na raiz do vault: estado dos HTML, sessões e versão baixada
+do Revisor, regras de ignorar. O Obsidian esconde pastas que começam com ponto. O nome muda quando o app ganhar
 nome (ver seção 10).
 
 ## 8. A linha de corte
@@ -441,12 +476,19 @@ nenhum texto sumiu. Esse teste roda no CI.
 
 ### Etapa 6: comentários
 
-Seção 6.7 no desktop: Revisor Visual no monorepo e embutido no HTML, comentário em
-Markdown, armazenamento em `.markdown-viewer/comments/`, ferramentas de comentário no
-MCP.
+Duas partes, nesta ordem.
+
+**No repositório do Revisor:** o contrato do anfitrião, a extensão passando a usá-lo
+sem mudar de comportamento, o `revisor-embed.js` publicado em cada release, e o campo
+opcional da nota do Claude.
+
+**Neste app, no desktop:** o anfitrião da seção 6.7, o Revisor dentro do visualizador
+de HTML, comentário em Markdown, o botão "Atualizar Revisor" em Configurações e as
+ferramentas de comentário no MCP.
 
 **Aceite:** um ciclo completo. O Matheus comenta um HTML e uma nota, o Claude Code lê
-pelo MCP, faz as mudanças e responde, e o Matheus vê a resposta no app.
+pelo MCP, aplica e marca, e o Matheus confere no app. Depois, uma release nova do
+Revisor chega ao app pelo botão, sem release nova do app.
 
 ### Etapa 7: Android de leitura
 
