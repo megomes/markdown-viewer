@@ -24,7 +24,13 @@ import {
 import type { FileMeta, Remote, RemoteEntry } from '@markdown-viewer/sync/protocol'
 import { fileSystem } from '~/platform'
 import { saveConfig, set, syncAvailable, view, type SyncConfig } from './sync-state'
-import { secrets, stateFolder, TauriStateStore, TauriSyncFiles } from '~/platform/sync-tauri'
+import {
+  allowFolder,
+  secrets,
+  stateFolder,
+  TauriStateStore,
+  TauriSyncFiles,
+} from '~/platform/sync-tauri'
 
 const SECRET = (vault: string) => `sync:${vault}`
 const PERIOD = 60_000
@@ -77,6 +83,20 @@ export function nudgeSync(delay = LOCAL_DELAY): void {
 }
 
 export async function startSync(): Promise<void> {
+  try {
+    await start()
+  } catch (error) {
+    for (const stop of running?.stops ?? []) stop()
+    running = null
+    set({
+      status: 'error',
+      message:
+        'Não deu para ligar o sync: ' + (error instanceof Error ? error.message : String(error)),
+    })
+  }
+}
+
+async function start(): Promise<void> {
   const config = view.config
   if (!config || running || !syncAvailable()) return
   const stored = await secrets.get(SECRET(config.vault))
@@ -88,6 +108,7 @@ export async function startSync(): Promise<void> {
     return
   }
   const secret = JSON.parse(stored) as Secret
+  await allowFolder(config.folder)
   const key = fromBase64(secret.key)
   const crypto = await VaultCrypto.create(key)
   const connection: Connection = { server: config.server, vault: config.vault, token: secret.token }
@@ -128,8 +149,9 @@ export function stopSync(): void {
   set({ status: view.config ? 'idle' : 'off' })
 }
 
+/** "Sincronizar agora": starts the sync first when it is not running yet. */
 export function syncNow(): Promise<void> {
-  return runPass()
+  return running ? runPass() : startSync()
 }
 
 async function remember(

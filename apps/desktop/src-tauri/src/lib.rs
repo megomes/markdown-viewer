@@ -88,6 +88,27 @@ fn secret_delete(name: String) -> Result<(), String> {
     }
 }
 
+/// The folder that keeps one vault's sync state, inside the app's own data
+/// folder and never inside the vault. Created when missing and opened to the
+/// filesystem plugin, so the engine can read and write it.
+#[tauri::command]
+fn sync_state_dir(app: tauri::AppHandle, vault: String) -> Result<String, String> {
+    if vault.is_empty() || !vault.chars().all(|c| c.is_ascii_alphanumeric() || c == '-' || c == '_') {
+        return Err(format!("nome de vault inválido: {vault}"));
+    }
+    let dir = app
+        .path()
+        .app_data_dir()
+        .map_err(|error| error.to_string())?
+        .join("sync")
+        .join(&vault);
+    std::fs::create_dir_all(dir.join("base")).map_err(|error| error.to_string())?;
+    app.fs_scope()
+        .allow_directory(&dir, true)
+        .map_err(|error| error.to_string())?;
+    Ok(dir.to_string_lossy().into_owned())
+}
+
 /// Sends a path to the system trash. Nothing in this app deletes for good.
 #[tauri::command]
 fn move_to_trash(path: String) -> Result<(), String> {
@@ -187,6 +208,7 @@ pub fn run() {
             allow_base,
             move_to_trash,
             secret_set,
+            sync_state_dir,
             secret_get,
             secret_delete,
             reveal_in_file_manager,
@@ -204,6 +226,17 @@ pub fn run() {
             panels::quit_app
         ])
         .setup(|app| {
+            // The main window starts hidden and the interface shows it after its
+            // first paint. If that never happens, it shows after three seconds:
+            // a window that stays hidden is worse than a white flash.
+            if let Some(window) = app.get_webview_window("main") {
+                std::thread::spawn(move || {
+                    std::thread::sleep(std::time::Duration::from_secs(3));
+                    if !window.is_visible().unwrap_or(true) {
+                        let _ = window.show();
+                    }
+                });
+            }
             if cfg!(debug_assertions) {
                 app.handle().plugin(
                     tauri_plugin_log::Builder::default()

@@ -301,7 +301,11 @@ function Configured({ activePath }: { activePath: { baseId: string; path: string
         ? 'Parou: ' + (sync.message ?? 'erro')
         : sync.status === 'offline'
           ? 'Sem conexão. Sincroniza quando voltar.'
-          : `Sincronizado ${ago(sync.lastSync)}`
+          : sync.status === 'off'
+            ? 'Parado. Use Sincronizar agora para ligar.'
+            : sync.lastSync
+              ? `Sincronizado ${ago(sync.lastSync)}`
+              : 'Ligado, esperando a primeira passada.'
 
   return (
     <div className="sync-body">

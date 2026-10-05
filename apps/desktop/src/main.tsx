@@ -36,3 +36,16 @@ createRoot(root).render(
     {role === 'dock' ? <Dock /> : role === 'peek' ? <Peek /> : role === 'note' ? <Note /> : <App />}
   </StrictMode>,
 )
+
+// The app's window opens hidden (`visible: false` in tauri.conf.json) and shows
+// itself once the interface has painted, so it never flashes white. Rust shows
+// it anyway after a few seconds, in case this never runs.
+if (role === 'main' && isDesktop()) {
+  requestAnimationFrame(() =>
+    requestAnimationFrame(() => {
+      void import('@tauri-apps/api/window').then(({ getCurrentWindow }) =>
+        getCurrentWindow().show(),
+      )
+    }),
+  )
+}

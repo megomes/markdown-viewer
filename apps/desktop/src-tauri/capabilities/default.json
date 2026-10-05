@@ -30,6 +30,8 @@
           "path": "**"
         }
       ]
-    }
+    },
+    "fs:allow-remove",
+    "core:window:allow-show"
   ]
 }

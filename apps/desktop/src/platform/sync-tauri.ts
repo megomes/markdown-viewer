@@ -7,7 +7,7 @@
  */
 
 import { invoke } from '@tauri-apps/api/core'
-import { appDataDir, join } from '@tauri-apps/api/path'
+import { join } from '@tauri-apps/api/path'
 import { mkdir, readDir, readFile, remove, rename, stat, writeFile } from '@tauri-apps/plugin-fs'
 import type { LocalFiles, LocalStat, StateStore, SyncState } from '@markdown-viewer/sync/engine'
 import { IGNORE_FILE, ignoreMatcher } from '@markdown-viewer/sync/ignore'
@@ -71,13 +71,19 @@ export class TauriSyncFiles implements LocalFiles {
   }
 }
 
+/**
+ * Opens the vault folder to the file plugin. The scope is not kept between runs:
+ * a folder picked yesterday is out of reach today until it is allowed again.
+ */
+export async function allowFolder(folder: string): Promise<void> {
+  await invoke('allow_base', { path: folder })
+}
+
 /** `<app data>/sync/<vault>/state.json` and `base/<file id>`. */
 export async function stateFolder(vault: string): Promise<string> {
-  const base = await appDataDir()
-  await invoke('allow_base', { path: base })
-  const folder = await join(base, 'sync', vault)
-  await mkdir(folder, { recursive: true })
-  return folder
+  // Rust creates it and opens it to the file plugin: the plugin's own mkdir is
+  // not allowed in the app's data folder.
+  return invoke<string>('sync_state_dir', { vault })
 }
 
 export class TauriStateStore implements StateStore {
