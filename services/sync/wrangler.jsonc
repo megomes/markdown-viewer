@@ -1,0 +1,14 @@
+{
+  "$schema": "../../node_modules/wrangler/config-schema.json",
+  "name": "markdown-viewer-sync",
+  "main": "src/index.ts",
+  "compatibility_date": "2026-10-01",
+  "workers_dev": true,
+  "preview_urls": false,
+  // Um Durable Object por vault, com SQLite próprio (plano grátis).
+  "durable_objects": { "bindings": [{ "name": "VAULT", "class_name": "Vault" }] },
+  "migrations": [{ "tag": "v1", "new_sqlite_classes": ["Vault"] }],
+  // Os pedaços criptografados dos arquivos.
+  "r2_buckets": [{ "binding": "CHUNKS", "bucket_name": "markdown-viewer-sync" }],
+  // SETUP_HASH (secret): SHA-256 em hex do código de configuração. Ver README.md.
+}

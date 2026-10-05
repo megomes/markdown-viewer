@@ -1,0 +1,35 @@
+# services/sync
+
+O servidor do sync (seção 6.5 de `docs/spec.md`), em
+`https://markdown-viewer-sync.megomes.workers.dev`.
+
+- **Worker** (`src/index.ts`): encaminha `/v/<vault>/…` para o Durable Object do vault.
+- **Durable Object** `Vault` (`src/vault.ts`), um por vault, com SQLite próprio: o log de
+  versões, a versão mais nova de cada arquivo, os aparelhos, os pedaços já guardados e os
+  pareamentos pendentes. Avisa os aparelhos por WebSocket quando entra uma versão.
+- **R2** `markdown-viewer-sync`: os pedaços dos arquivos, já criptografados, em
+  `<vault>/<id>`.
+
+O servidor nunca vê caminho, nome ou conteúdo. Vê o id estável de cada arquivo, o número
+de cada versão, qual aparelho mandou e o tamanho dos blobs.
+
+## Código de configuração
+
+Cria o vault e admite aparelhos quando não há outro aparelho para parear. Fica fora do
+git, em `~/.markdown-viewer/sync-setup-code.txt`. O Worker guarda só o SHA-256 dele, no
+secret `SETUP_HASH`.
+
+## Publicar
+
+```bash
+npm run deploy -w @markdown-viewer/sync-service
+```
+
+## Testar com cópias do vault
+
+```bash
+npm run sync:device -- create <pasta A> <vault> --name mac --password "..."
+npm run sync:device -- pair <pasta A>
+npm run sync:device -- join <pasta B> <vault> <código> --name win
+npm run sync:device -- sync <pasta B>
+```

@@ -1,0 +1,21 @@
+{
+  "name": "@markdown-viewer/sync",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "description": "Motor de sync: pedaços, merge de três vias, protocolo (docs/spec.md, seção 6.5).",
+  "exports": {
+    "./*": "./src/*.ts"
+  },
+  "scripts": {
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "@markdown-viewer/crypto": "*",
+    "node-diff3": "^3.2.1"
+  },
+  "devDependencies": {
+    "@types/node": "^26.6.4"
+  }
+}

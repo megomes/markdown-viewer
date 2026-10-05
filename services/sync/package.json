@@ -1,0 +1,17 @@
+{
+  "name": "@markdown-viewer/sync-service",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "description": "Worker, Durable Object e R2 do sync (docs/spec.md, seção 6.5).",
+  "scripts": {
+    "dev": "wrangler dev --port 8788",
+    "deploy": "wrangler deploy",
+    "types": "wrangler types",
+    "typecheck": "tsc --noEmit"
+  },
+  "devDependencies": {
+    "@cloudflare/workers-types": "^5.20261005.1",
+    "wrangler": "^4.147.0"
+  }
+}
