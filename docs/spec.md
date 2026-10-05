@@ -38,6 +38,7 @@ Dois fatos do uso real moldam o produto:
 | Galaxy S25 Ultra      | Android    | Expo                 | Antes do corte  |
 | Galaxy Tab S10 FE     | Android    | Expo, layout tablet  | Antes do corte  |
 | Galaxy Watch 8        | Wear OS    | Módulo nativo Kotlin | Depois do corte |
+| Qualquer navegador    | Web        | Next.js na Vercel    | Depois do corte |
 
 O Expo não gera app de Wear OS, então o relógio é um módulo nativo dentro do projeto
 mobile, que conversa com o celular.
@@ -95,6 +96,7 @@ mantém.
 
 ### Depois do corte, em ordem provável
 
+- Acesso pela web (seção 6.10).
 - Edição no celular e no tablet.
 - Widgets. O Matheus tem planos próprios e complexos para eles, que serão especificados
   à parte.
@@ -242,7 +244,8 @@ recuperável pelo histórico.
   aparelhos.
 
 **Autenticação.** Não existe conta nem login com Google. Cada aparelho recebe um token
-no pareamento. O app mostra a lista de aparelhos e permite revogar um.
+no pareamento. O app mostra a lista de aparelhos e permite revogar um. A web tem uma
+senha própria, descrita na seção 6.10.
 
 **O que sincroniza.** Tudo dentro da pasta, inclusive `.obsidian/` (assim o Obsidian
 continua funcionando como reserva em qualquer aparelho). Ficam de fora `.git/`,
@@ -443,6 +446,45 @@ arquivo que estava aberto.
 O `CLAUDE.md` deste repositório ganha a seção "Feedback do app", espelho da seção
 "Notas do app" do DailyFlow, trocando o SQL do Neon pelo D1 e pelo script.
 
+### 6.10 Web
+
+As notas também abrem num navegador qualquer, num app Next.js publicado na Vercel pela
+integração Git dela, com deploy a cada commit na `main`.
+
+**O que faz.** O mesmo que o app Android de leitura (seção 6.8): árvore, busca, leitura
+de Markdown, HTML, PDF, Bases, comentários e feedback. O leitor é o mesmo código dos
+DOM components do Expo, que já é web.
+
+**Como a criptografia continua de pé.** A Vercel só entrega a página. O navegador baixa
+os blobs criptografados direto da Cloudflare e decifra localmente. Nem a Vercel nem a
+Cloudflare leem nada.
+
+**Duas camadas, de propósito:**
+
+1. **Senha da web.** Uma só, longa e gerada aleatoriamente, sem cadastro nem gestão de
+   usuário. Ela abre a sessão no Worker. Guardada no Worker só como hash Argon2id.
+2. **Chave do vault no navegador.** Na primeira vez em cada navegador, ele é pareado
+   como qualquer aparelho: QR mostrado pelo celular ou desktop, ou o código de
+   recuperação. A chave fica no IndexedDB como chave WebCrypto não exportável. Dali em
+   diante, só a senha.
+
+As duas camadas são separadas para que **"esqueci a senha" funcione sem quebrar a
+criptografia**. Se a senha da web também fosse a chave do vault, ninguém conseguiria
+redefini-la por e-mail sem que o servidor pudesse ler as notas.
+
+**Esqueci a senha.** Um botão na tela de login manda um link de uso único, válido por
+15 minutos, para o e-mail do Matheus, fixo na configuração do Worker. O link gera uma
+senha nova, mostra uma vez e invalida as sessões abertas. A chave do vault nos
+navegadores já pareados não muda. O envio usa o Resend no plano grátis, que manda para
+o próprio e-mail da conta sem precisar de domínio.
+
+**Proteções.** Limite de tentativas de login por IP, sessão em cookie `HttpOnly` com
+validade de 30 dias, e cabeçalhos que impedem a página de ser embutida em outro site.
+
+**Arquivos grandes e HTML.** PDF e anexo grande baixam sob demanda, como no celular. O
+HTML abre num frame isolado, e um service worker entrega os arquivos relativos (CSS,
+imagens) decifrados do cache local.
+
 ## 7. Arquitetura
 
 **Monorepo**, com npm workspaces:
@@ -450,6 +492,7 @@ O `CLAUDE.md` deste repositório ganha a seção "Feedback do app", espelho da s
 | Pasta                   | Conteúdo                                                                                                         |
 | ----------------------- | ---------------------------------------------------------------------------------------------------------------- |
 | `apps/desktop`          | O app Tauri atual                                                                                                |
+| `apps/web`              | O app Next.js da web, publicado na Vercel (seção 6.10)                                                           |
 | `apps/mobile`           | O app Expo. O editor e o leitor entram como DOM components (`"use dom"`), reaproveitando o CodeMirror do desktop |
 | `packages/core`         | Dialeto Markdown do Obsidian, índice, resolução de links, Bases                                                  |
 | `packages/sync`         | Motor de sync: chunking, merge, fila, protocolo                                                                  |
@@ -593,6 +636,15 @@ Seção 6.8, no S25 Ultra e no Tab S10 FE, com comentários no toque.
 O dia da troca da seção 8 e os 14 dias de observação.
 
 **Aceite:** as cinco condições da linha de corte. **Cancelar o Obsidian Sync.**
+
+### Etapa 10: web
+
+Seção 6.10: `apps/web` na Vercel, login com a senha gerada, "esqueci a senha" pelo
+Resend, pareamento do navegador por QR.
+
+**Aceite:** abrir o vault num navegador recém-instalado, parear pelo QR do celular, ler
+uma nota, um tracker HTML e um PDF grande. Redefinir a senha pelo e-mail e entrar de
+novo sem parear outra vez.
 
 ### Depois do corte
 
