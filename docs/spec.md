@@ -178,20 +178,20 @@ grupos que no Obsidian.
 
 **Infraestrutura, toda na Cloudflare, no plano grátis:**
 
-| Peça                         | Papel                                                                                                                                      |
-| ---------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------ |
-| Worker                       | API: autenticar o aparelho, receber commits, emitir URL assinada do R2                                                                     |
-| Durable Object, um por vault | Guarda o log de mudanças no SQLite dele e serializa os commits. Mantém a conexão em tempo real com os aparelhos (WebSocket com hibernação) |
-| R2                           | Guarda os pedaços criptografados dos arquivos. 10 GB grátis, sem custo de download                                                         |
+| Peça                         | Papel                                                                                                                                   |
+| ---------------------------- | --------------------------------------------------------------------------------------------------------------------------------------- |
+| Worker                       | Encaminha cada chamada para o Durable Object do vault                                                                                   |
+| Durable Object, um por vault | Autentica o aparelho, guarda o log no SQLite dele, serializa os commits, lê e grava os pedaços no R2 e avisa os aparelhos por WebSocket |
+| R2                           | Guarda os pedaços criptografados dos arquivos. 10 GB grátis, sem custo de download                                                      |
 
 O Durable Object por vault resolve de graça o problema mais difícil de um sync, que é
-ordenar os commits de vários aparelhos sem corrida. Se os limites grátis dele não
-servirem, os metadados vão para o D1. A conferência dos limites é a primeira tarefa da
-etapa 6.
+ordenar os commits de vários aparelhos sem corrida. Ele cabe no plano grátis (SQLite
+em Durable Object faz parte do Workers Free), e o D1 não foi necessário.
 
 **Arquivos em pedaços.** Cada arquivo é quebrado em pedaços de tamanho variável, em
 torno de 4 MB, por chunking definido pelo conteúdo. Cada pedaço é criptografado e sobe
-direto para o R2 por URL assinada, sem passar pelo Worker. Isso:
+pelo Durable Object para o R2, numa requisição de no máximo 8 MB. URL assinada exigiria
+chaves de acesso ao R2 guardadas no servidor, e não foi preciso. Isso:
 
 - acaba com o limite de tamanho, porque nenhuma requisição passa de alguns MB;
 - faz uma edição pequena num PDF enorme subir só o pedaço que mudou;
