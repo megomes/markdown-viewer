@@ -1,0 +1,42 @@
+[package]
+name = "markdown-viewer"
+version = "0.4.0"
+description = "Editor de Markdown sobre uma pasta de arquivos"
+authors = ["Reasset"]
+license = ""
+repository = ""
+edition = "2021"
+rust-version = "1.77.2"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[lib]
+name = "markdown_viewer_lib"
+crate-type = ["staticlib", "cdylib", "rlib"]
+
+[build-dependencies]
+tauri-build = { version = "2.6.3", features = [] }
+
+[dependencies]
+serde_json = "1.0"
+serde = { version = "1.0", features = ["derive"] }
+log = "0.4"
+# `tray-icon` is what keeps the app alive after its window is closed: the
+# notes on the edge of the screen outlive the editor, and the tray is the
+# only way back to it and the only way out of it.
+#
+# `macos-private-api` is what lets a window have no background. Without it the
+# squares on the edge of the screen would be squares drawn on a grey slab, and
+# the note that floats out would have square corners on a rectangle nobody
+# asked for. It goes with `macOSPrivateApi` in `tauri.conf.json`, and it is
+# the one thing here that would stop this app being sold in the App Store.
+tauri = { version = "2.11.3", features = ["tray-icon", "macos-private-api"] }
+tauri-plugin-log = "2"
+tauri-plugin-fs = "2"
+tauri-plugin-dialog = "2"
+trash = "5"
+tauri-plugin-process = "2"
+
+# The updater does not build for mobile, and this app has no mobile target.
+[target.'cfg(not(any(target_os = "android", target_os = "ios")))'.dependencies]
+tauri-plugin-updater = "2"

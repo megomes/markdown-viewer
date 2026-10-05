@@ -1,0 +1,133 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+jobs:
+  # The updater compares the version in `tauri.conf.json` against the one the
+  # running app was built with. A tag that disagrees with the config produces a
+  # release nobody is ever offered, and nothing anywhere reports an error, so
+  # the disagreement is caught here instead of in the wild.
+  check-version:
+    name: Confere se a tag bate com a versão
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Compara a tag com o tauri.conf.json
+        run: |
+          set -euo pipefail
+          config=$(node -p "require('./src-tauri/tauri.conf.json').version")
+          tag="${GITHUB_REF_NAME#v}"
+          if [ "$config" != "$tag" ]; then
+            echo "::error::A tag diz $tag e o tauri.conf.json diz $config. Elas têm que bater."
+            exit 1
+          fi
+          echo "Ambos em $config."
+
+  bundle:
+    name: Empacota para ${{ matrix.label }}
+    needs: check-version
+    permissions:
+      contents: write
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - platform: macos-latest
+            label: macOS (Apple Silicon)
+            args: '--target aarch64-apple-darwin'
+          - platform: macos-latest
+            label: macOS (Intel)
+            args: '--target x86_64-apple-darwin'
+          - platform: ubuntu-22.04
+            label: Linux
+            args: ''
+          - platform: windows-latest
+            label: Windows
+            args: ''
+    runs-on: ${{ matrix.platform }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          # The test files die loading jsdom on Node 20, and the deploy runs 22.
+          node-version: 22
+          cache: npm
+
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ startsWith(matrix.platform, 'macos') && 'aarch64-apple-darwin,x86_64-apple-darwin' || '' }}
+
+      - uses: swatinem/rust-cache@v2
+        with:
+          workspaces: src-tauri
+
+      # WebKitGTK and the AppImage packer only exist on the Linux runner. The
+      # indicator is what draws the icon beside the clock there, and without it
+      # an app closed to the tray would be an app with no way back.
+      #
+      # Ayatana's and Canonical's are the same library twice, and the two
+      # packages declare each other a conflict: asking for both is a build that
+      # stops at apt. It is Ayatana's that Tauri looks for at run time.
+      - name: Instala as dependências de sistema do Linux
+        if: matrix.platform == 'ubuntu-22.04'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libwebkit2gtk-4.1-dev libayatana-appindicator3-dev \
+            librsvg2-dev patchelf
+
+      - run: npm ci
+
+      # Without this the macOS bundle ships with no `_CodeSignature` at all:
+      # only the binary carries the linker's ad-hoc signature, and the bundle
+      # around it carries none. `codesign --verify` then fails outright, and
+      # the Mac that opens it is told the app is damaged and should go to the
+      # Trash, with no way past it. Signing the whole bundle ad-hoc makes the
+      # signature valid, which downgrades that to the ordinary warning about
+      # an unidentified developer, the one with "Open Anyway" behind it.
+      #
+      # This is not notarisation and does not pretend to be. With an Apple
+      # Developer ID in the secrets, tauri-action signs and notarises instead,
+      # and this step has nothing left to repair.
+      - name: Assina o bundle do macOS
+        if: startsWith(matrix.platform, 'macos')
+        run: echo "APPLE_SIGNING_IDENTITY=-" >> "$GITHUB_ENV"
+
+      - uses: tauri-apps/tauri-action@v0
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          # Without these the bundle step fails outright, because the config
+          # asks for updater artifacts and an unsigned one would be refused by
+          # every app it reached.
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
+        with:
+          tagName: ${{ github.ref_name }}
+          releaseName: markdown-viewer __VERSION__
+          releaseBody: Baixe abaixo o pacote do seu sistema.
+          # Kept a draft until every platform has uploaded. A release that is
+          # already public carries a `latest.json` naming platforms whose files
+          # are still being built, and an app that asks in that window is
+          # offered an update it cannot download.
+          releaseDraft: true
+          prerelease: false
+          includeUpdaterJson: true
+          args: ${{ matrix.args }}
+
+  publish:
+    name: Publica a release
+    needs: bundle
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+      - name: Tira a release do rascunho
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        # Only now does `releases/latest/download/latest.json` start answering,
+        # and by now every file it names is in place.
+        run: gh release edit "$GITHUB_REF_NAME" --draft=false --repo "$GITHUB_REPOSITORY"
