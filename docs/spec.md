@@ -1,0 +1,475 @@
+# Spec: substituir o Obsidian
+
+Data: 2026-10-04. Escrita a partir da entrevista com o Matheus nesta data.
+
+## 1. Objetivo
+
+Um app de notas que funciona em todos os aparelhos do Matheus, abre o vault que hoje
+vive no Obsidian sem quebrar nada, e sincroniza sozinho, criptografado, sem limite de
+tamanho de arquivo. Quando ele estiver pronto, a assinatura do Obsidian Sync (US$ 5 por
+mês, 1 GB, 5 MB por arquivo, um mês de histórico) é cancelada.
+
+Dois fatos do uso real moldam o produto:
+
+- **O Claude escreve a maior parte das notas.** O Claude Code abre a pasta do vault e
+  o app do Claude edita os arquivos direto. O app precisa conviver com isso e ajudar.
+- **O Matheus trabalha mais em HTML do que em Markdown.** HTML é formato de primeira
+  classe, não anexo.
+
+## 2. Princípios
+
+1. **O arquivo em disco é a verdade.** O vault continua sendo uma pasta comum, na
+   mesma estrutura que o Obsidian usa. A nuvem só transporta. Se o app falhar, a pasta
+   continua abrindo no Obsidian, que é grátis.
+2. **Nunca perder uma linha.** Diante de qualquer dúvida o sync guarda as duas versões.
+   Toda decisão de merge pode ser desfeita pelo histórico.
+3. **A nuvem não lê nada.** Conteúdo, nomes de arquivo e pastas saem do aparelho
+   criptografados.
+4. **Sem limite de tamanho.** Um PDF de 2 GB sincroniza pelo mesmo caminho que uma nota.
+5. **Rápido.** A criptografia e o sync não podem ser sentidos no uso. Os números estão
+   na seção 9.
+
+## 3. Aparelhos
+
+| Aparelho              | Sistema    | App                  | Quando          |
+| --------------------- | ---------- | -------------------- | --------------- |
+| MacBook Pro M5 Pro    | macOS      | Tauri (o atual)      | Antes do corte  |
+| Desktop Ryzen 5800X3D | Windows 11 | Tauri (o atual)      | Antes do corte  |
+| Galaxy S25 Ultra      | Android    | Expo                 | Antes do corte  |
+| Galaxy Tab S10 FE     | Android    | Expo, layout tablet  | Antes do corte  |
+| Galaxy Watch 8        | Wear OS    | Módulo nativo Kotlin | Depois do corte |
+
+O Expo não gera app de Wear OS, então o relógio é um módulo nativo dentro do projeto
+mobile, que conversa com o celular.
+
+## 4. O que o vault mostrou
+
+Levantamento de `C:\Users\mathe\Documents\Obsidian Notes` em 2026-10-04.
+
+**Tamanho.** 1,3 GB no total. 945 MB são 154 PDFs (manuais de Flight Sim, o maior com
+140 MB), 156 MB são imagens, e as 844 notas `.md` somam 11,8 MB. Os PDFs grandes não
+aparecem hoje no celular por causa do limite de 5 MB do Sync Standard.
+
+**Outros arquivos.** 82 HTML (três deles nos favoritos, os trackers de treino, que
+guardam progresso no `localStorage`), mais `.py`, `.lua`, `.json`, `.txt`, `.xlsx`,
+`.docx`, `.pem` e arquivos de backup gerados por script.
+
+**Sintaxe em uso**, em número de notas:
+
+| Recurso                   | Notas | Observação                                                                                                               |
+| ------------------------- | ----- | ------------------------------------------------------------------------------------------------------------------------ |
+| Frontmatter               | 704   | Chaves: `tags`, `tipo`, `done`, `aliases`, `updated`, `type`, `status`, `resumo`, `autor`, `repo`                        |
+| Tags no frontmatter       | 609   | Tag solta no texto aparece em só 12 notas                                                                                |
+| Wiki link `[[ ]]`         | 441   |                                                                                                                          |
+| `aliases`                 | 206   | O link precisa achar a nota pelo alias                                                                                   |
+| Callout                   | 194   | `warning`, `info`, `abstract`, `note`, `important`, `tip`, `question`, `danger`, `success`, `update`, `check`, `example` |
+| Tabela                    | 186   |                                                                                                                          |
+| Link Markdown `[](...)`   | 147   |                                                                                                                          |
+| Embed `![[ ]]`            | 115   | 124 imagens, 17 notas, alguns xlsx e docx                                                                                |
+| Tarefa `- [ ]`            | 43    |                                                                                                                          |
+| Mermaid                   | 7     |                                                                                                                          |
+| Referência de bloco `^id` | 2     |                                                                                                                          |
+| Bases (`.base`)           | 3     | Biblioteca, Media, 3D Printing. Filtro, fórmula, agrupamento                                                             |
+
+**Sem uso:** notas diárias, Canvas, fórmula matemática, Dataview.
+
+**Configuração.** Anexos vão para a pasta `Files`. `alwaysUpdateLinks` está ligado, então
+renomear atualiza os links. O plugin Iconize põe ícone nas pastas. Cada área (`Personal
+Notes`, `Reasset Notes`) tem `CLAUDE.md` e uma pasta `_meta` com índices que o Claude
+mantém.
+
+## 5. Escopo
+
+### Antes do corte
+
+- Compatibilidade total com o vault da seção 4.
+- HTML com visualização, estado sincronizado e abrir no navegador.
+- Leitor de PDF e de código.
+- Bases em modo leitura.
+- Sync criptografado entre os quatro aparelhos, sem limite de tamanho.
+- Histórico de versões sem prazo para texto.
+- MCP do vault para o Claude.
+- Comentários para o Claude, no desktop e no celular, com o Revisor Visual embutido.
+- App Android de leitura, no celular e no tablet.
+
+### Depois do corte, em ordem provável
+
+- Edição no celular e no tablet.
+- Widgets. O Matheus tem planos próprios e complexos para eles, que serão especificados
+  à parte.
+- Galaxy Watch.
+- Tarefas, lembretes e agenda.
+- Claude no app do celular, usando o desktop como ponte (ver 6.6).
+- Bases com edição.
+
+### Fora
+
+- Sistema de plugins.
+- Publish.
+- Canvas, grafo, notas diárias.
+- Verificador de convenções do vault e botão "abrir no Claude Code" (propostos e
+  recusados na entrevista).
+- Marcação de "o que o Claude mudou" (proposta e recusada).
+
+## 6. Funcionalidades
+
+### 6.1 Compatibilidade com o vault
+
+O critério é simples: toda nota que abre certa no Obsidian abre certa aqui.
+
+- **Callouts** com a lista completa do Obsidian, inclusive os apelidos (`summary` e `tldr`
+  são `abstract`, `caution` é `warning`, e assim por diante), tipo desconhecido caindo no
+  estilo de `note`, e callout dobrável com `[!tipo]-` e `[!tipo]+`. Hoje o app só conhece
+  os cinco do GitHub.
+- **Frontmatter** como painel de propriedades, com os tipos que o Obsidian usa: texto,
+  lista, número, checkbox, data.
+- **Resolução de links** igual à do Obsidian: pelo nome mais curto que não seja ambíguo,
+  pelo caminho, e pelo `aliases`. `[[nota#título]]`, `[[nota#^bloco]]` e `[[nota|texto]]`.
+- **Embeds**: `![[imagem.png]]` procurando na pasta de anexos e no vault, com
+  `![[imagem.png|300]]` para largura; `![[nota]]` e `![[nota#título]]` como transclusão;
+  outros tipos como cartão que abre o arquivo.
+- **Renomear e mover atualizam os links** em todo o vault, como o `alwaysUpdateLinks`.
+- **Tags** do frontmatter e do texto, juntas, no painel de tags e na busca.
+- **Mermaid** renderizado.
+- Realce `==texto==`, comentário `%% %%` escondido na leitura, nota de rodapé,
+  referência de bloco `^id`.
+- **Ícones de pasta** lidos da configuração do Iconize, para a árvore ficar igual.
+- **Favoritos** lidos do `bookmarks.json` na primeira abertura.
+
+Teste de aceite: um script percorre o vault inteiro e lista link, embed e alias que não
+resolvem. O número tem que ser igual ao que já está quebrado no Obsidian.
+
+### 6.2 HTML
+
+- **Visualização dentro do app**, num frame isolado do resto do app. Carrega CSS, imagem
+  e script relativos à pasta do arquivo, e roda o JavaScript da página.
+- **Estado sincronizado.** O app substitui o `localStorage` da página por um que grava em
+  `.markdown-viewer/state/<caminho do arquivo>.json`. Esse arquivo sincroniza e é
+  criptografado como qualquer outro. Os trackers atuais passam a sincronizar sem mudar
+  uma linha.
+- **Ver código**, só leitura, com realce. O app não edita HTML: quem edita é o Claude.
+- **Abrir no navegador.** O estado no navegador fica separado do estado no app, e o app
+  avisa isso.
+- **HTML com os mesmos direitos de uma nota**: entra na busca pelo texto visível, aceita
+  `[[link]]` apontando para ele, aparece nos backlinks e nos favoritos.
+
+### 6.3 PDF, código e outros
+
+- **PDF** com pdf.js: rolagem contínua, busca no texto, zoom, abrir na página. Um PDF de
+  140 MB abre sem travar.
+- **Código** (`.py`, `.lua`, `.json`, `.js`, `.css`...) em leitura, com realce.
+- **Imagem** em visualizador próprio.
+- O resto (`.xlsx`, `.docx`, `.zip`...) abre no app padrão do sistema.
+
+### 6.4 Bases, em leitura
+
+- Lê os arquivos `.base` e mostra a visão de tabela, com as views que o arquivo define.
+- Suporta pelo menos o que as três bases atuais usam: filtro com `and`, `file.hasTag`,
+  fórmula com `if`, `displayName`, `groupBy`, ordenação por propriedade e por fórmula.
+- Clicar numa linha abre a nota.
+
+Teste de aceite: as três bases mostram as mesmas linhas, na mesma ordem e nos mesmos
+grupos que no Obsidian.
+
+### 6.5 Sync
+
+**Infraestrutura, toda na Cloudflare, no plano grátis:**
+
+| Peça                         | Papel                                                                                                                                      |
+| ---------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------ |
+| Worker                       | API: autenticar o aparelho, receber commits, emitir URL assinada do R2                                                                     |
+| Durable Object, um por vault | Guarda o log de mudanças no SQLite dele e serializa os commits. Mantém a conexão em tempo real com os aparelhos (WebSocket com hibernação) |
+| R2                           | Guarda os pedaços criptografados dos arquivos. 10 GB grátis, sem custo de download                                                         |
+
+O Durable Object por vault resolve de graça o problema mais difícil de um sync, que é
+ordenar os commits de vários aparelhos sem corrida. Se os limites grátis dele não
+servirem, os metadados vão para o D1. A conferência dos limites é a primeira tarefa da
+etapa 5.
+
+**Arquivos em pedaços.** Cada arquivo é quebrado em pedaços de tamanho variável, em
+torno de 4 MB, por chunking definido pelo conteúdo. Cada pedaço é criptografado e sobe
+direto para o R2 por URL assinada, sem passar pelo Worker. Isso:
+
+- acaba com o limite de tamanho, porque nenhuma requisição passa de alguns MB;
+- faz uma edição pequena num PDF enorme subir só o pedaço que mudou;
+- deixa upload e download retomarem de onde pararam.
+
+O identificador de cada pedaço é um HMAC do conteúdo com uma chave do vault. Assim
+pedaços iguais não sobem duas vezes, e o servidor não descobre nada sobre o conteúdo.
+
+**Modelo de dados.** Cada arquivo tem um identificador estável, que sobrevive a renomear
+e mover. Cada versão registra, criptografado: caminho, tamanho, data de modificação,
+hash e a lista de pedaços. O servidor só vê o identificador, o número de sequência, o
+aparelho de origem e o tamanho dos blobs.
+
+**Fluxo.**
+
+1. O aparelho detecta a mudança: pelo editor, pelo observador de arquivos do sistema, ou
+   por varredura ao abrir (o Claude Code edita com o app fechado).
+2. Sobe os pedaços que o R2 ainda não tem.
+3. Faz o commit no Durable Object dizendo em qual versão a edição se baseou.
+4. O Durable Object avisa os outros aparelhos conectados, que buscam a mudança na hora.
+   Aparelho desconectado pede tudo desde o último número de sequência que viu.
+
+**Conflito.**
+
+- **Texto** (`.md`, `.txt`, `.html`, código): merge de três vias, linha a linha, usando
+  como base a última versão que os dois aparelhos tinham em comum. Trechos diferentes se
+  juntam sozinhos. Só quando os dois mexeram no mesmo trecho nasce uma cópia de conflito
+  ao lado (`Nota (conflito S25 2026-10-04 1532).md`), e o app avisa.
+- **Binário**: vence a versão mais nova, e a outra fica no histórico.
+- **Renomear contra editar**: os dois se aplicam, porque o identificador é estável.
+- **Apagar contra editar**: a edição vence e o arquivo volta.
+- O estado dos HTML (`.markdown-viewer/state/`) é JSON e tem merge por chave.
+
+**Histórico.** Texto guarda todas as versões, sem prazo. Binário guarda as últimas cinco
+versões ou um ano, o que for maior, para caber nos 10 GB. O app mostra o histórico de
+cada arquivo com diferença lado a lado e restaura qualquer versão. Arquivo apagado fica
+recuperável pelo histórico.
+
+**Criptografia.**
+
+- libsodium em todos os aparelhos: XChaCha20-Poly1305 para conteúdo, Argon2id para
+  derivar chave de senha. A mesma biblioteca no desktop e no Expo.
+- Uma chave mestra aleatória por vault. Ela fica no servidor só embrulhada: uma vez pela
+  senha do vault, outra pelo código de recuperação.
+- Cada aparelho guarda a chave no cofre do sistema: Keychain no macOS, DPAPI no Windows,
+  Keystore no Android.
+- **Aparelho novo**: escaneia um QR mostrado por um aparelho já pareado, ou digita a
+  senha do vault.
+- O código de recuperação é gerado na criação do vault e precisa ser guardado fora dos
+  aparelhos.
+
+**Autenticação.** Não existe conta nem login com Google. Cada aparelho recebe um token
+no pareamento. O app mostra a lista de aparelhos e permite revogar um.
+
+**O que sincroniza.** Tudo dentro da pasta, inclusive `.obsidian/` (assim o Obsidian
+continua funcionando como reserva em qualquer aparelho). Ficam de fora `.git/`,
+`node_modules/`, `.DS_Store`, `.trash/` e o que estiver num arquivo
+`.markdown-viewer/ignore`, no formato do `.gitignore`.
+
+**Por aparelho:**
+
+- Desktop: baixa tudo, sempre. Sincroniza com a janela fechada, pela bandeja.
+- Celular e tablet: baixam todo texto, HTML e imagem pequena. **PDF e arquivo grande
+  só baixam quando abertos**, e ficam em cache. Dá para marcar uma pasta como "sempre
+  offline".
+
+**Regra de transição.** Nunca dois motores de sync na mesma pasta. Enquanto o Obsidian
+Sync estiver ligado, o sync novo é testado numa cópia do vault. A troca acontece num dia
+só (ver seção 8).
+
+### 6.6 MCP do vault
+
+Um servidor MCP local, registrado no Claude Code e no app do Claude no desktop. Ele lê
+o vault direto do disco e não depende do app estar aberto. Usa o mesmo índice do app,
+então já resolve alias, backlink e Base.
+
+O Claude continua editando os arquivos direto, como hoje. O MCP não substitui isso: dá
+ao Claude o que ele não consegue sozinho com busca de texto.
+
+| Ferramenta                     | O que faz                                                                     |
+| ------------------------------ | ----------------------------------------------------------------------------- |
+| `search`                       | Busca no texto de notas e HTML, com filtro por tag, propriedade, pasta e tipo |
+| `get_note`                     | Conteúdo, propriedades, links de saída resolvidos e backlinks                 |
+| `resolve_link`                 | Diz para qual arquivo um `[[nome]]` aponta, considerando alias                |
+| `backlinks`                    | Quem aponta para um arquivo                                                   |
+| `query_base`                   | Roda uma `.base` e devolve as linhas                                          |
+| `list_tags`, `list_properties` | Vocabulário do vault, com contagem e valores                                  |
+| `rename`                       | Renomeia ou move um arquivo e atualiza todos os links                         |
+| `comments_list`                | Comentários abertos, filtrando por arquivo ou pasta                           |
+| `comment_reply`                | Responde a um comentário                                                      |
+| `comment_resolve`              | Marca um comentário como resolvido                                            |
+
+Os índices em `_meta/` continuam existindo. O MCP não os substitui.
+
+**Depois do corte:** o app do Claude no celular não consegue usar um MCP local, e um
+MCP remoto na nuvem quebraria a criptografia. A saída é o desktop Windows servir de
+ponte quando estiver ligado. Fica para depois.
+
+### 6.7 Comentários para o Claude
+
+O Matheus lê, marca um trecho e escreve o que quer mudado. Os comentários viram uma
+fila que o Claude lê e responde. É o que o Revisor Visual faz hoje no navegador, trazido
+para dentro do app e para todos os aparelhos.
+
+- **Em HTML**, pelo **Revisor Visual embutido** no visualizador. O código vem de
+  `C:\Users\mathe\Code\revisor-visual` e passa a viver no monorepo como pacote, de onde
+  a extensão de navegador também é gerada, para não haver duas cópias. Uma camada fina
+  troca o armazenamento da extensão pelo armazenamento de comentários do app.
+- **Em Markdown**, selecionando o trecho na nota, no editor do desktop e no leitor do
+  celular.
+- **No toque**, sem tecla Alt: um botão liga o modo revisão, e nele o toque anota (é o
+  modo "clique simples anota" que o Revisor já tem). Pressionar e segurar sobe na árvore
+  de elementos.
+- **Âncora**: o texto citado, com um pedaço antes e depois para desempatar; em HTML,
+  também o caminho CSS, como o Revisor já faz. Se o Claude reescrever e a âncora sumir,
+  o marcador fica cinza e o comentário continua na lista.
+- **Estado**: aberto, respondido, resolvido. O Claude responde no próprio comentário,
+  e a conversa pode continuar.
+- **Onde fica**: em `.markdown-viewer/comments/<caminho do arquivo>.json`. É arquivo do
+  vault, então sincroniza criptografado e o Claude Code consegue ler mesmo sem o MCP.
+  Renomear o arquivo move os comentários junto.
+- **Exportar**: o "Copiar tudo" do Revisor continua existindo, no mesmo formato, para
+  colar em qualquer Claude.
+- O app mostra quantos comentários estão abertos e quais o Claude respondeu.
+
+### 6.8 App Android de leitura
+
+Celular e tablet, só leitura nesta primeira versão.
+
+- Parear com o vault por QR.
+- Árvore de arquivos, abertura rápida por nome, busca local, tags, favoritos, backlinks,
+  sumário da nota.
+- Leitura de Markdown com a mesma renderização do desktop.
+- HTML com estado sincronizado, PDF baixado sob demanda, Bases, imagens, código.
+- Comentários, com o Revisor no toque.
+- Funciona offline com o que já foi baixado.
+- No tablet, árvore e nota lado a lado.
+
+## 7. Arquitetura
+
+**Monorepo**, com npm workspaces:
+
+| Pasta              | Conteúdo                                                                                                         |
+| ------------------ | ---------------------------------------------------------------------------------------------------------------- |
+| `apps/desktop`     | O app Tauri atual                                                                                                |
+| `apps/mobile`      | O app Expo. O editor e o leitor entram como DOM components (`"use dom"`), reaproveitando o CodeMirror do desktop |
+| `packages/core`    | Dialeto Markdown do Obsidian, índice, resolução de links, Bases                                                  |
+| `packages/sync`    | Motor de sync: chunking, merge, fila, protocolo                                                                  |
+| `packages/crypto`  | Chaves e criptografia sobre libsodium                                                                            |
+| `packages/revisor` | O Revisor Visual, de onde sai a extensão e o modo embutido                                                       |
+| `packages/mcp`     | O servidor MCP do vault                                                                                          |
+| `services/sync`    | Worker e Durable Object da Cloudflare                                                                            |
+
+O motor de sync e o índice são TypeScript puro, sem depender de Tauri nem de Expo. Cada
+app fornece só a camada de arquivo, de cofre de chave e de rede.
+
+**Armazenamento local:**
+
+- Desktop: a pasta do vault, mais um SQLite com o estado do sync e o índice.
+- Android: os arquivos na área privada do app e um SQLite (expo-sqlite) com o estado do
+  sync e o índice. Chave no `expo-secure-store`.
+
+**Pasta `.markdown-viewer/`** na raiz do vault: estado dos HTML, comentários, regras de
+ignorar. O Obsidian esconde pastas que começam com ponto. O nome muda quando o app ganhar
+nome (ver seção 10).
+
+## 8. A linha de corte
+
+O Obsidian Sync é cancelado quando estas cinco condições forem verdade:
+
+1. **Vault inteiro abre sem quebrar.** O script da seção 6.1 não acha nada quebrado além
+   do que já está quebrado no Obsidian, e as três Bases batem.
+2. **Sync sem perda por 14 dias seguidos**, com os quatro aparelhos, no vault real. O
+   período inclui edição offline em dois aparelhos, edição do Claude Code com o app
+   fechado e um PDF de mais de 100 MB.
+3. **No celular** dá para ler, buscar, abrir os trackers HTML com o progresso
+   sincronizado, abrir um manual de 140 MB e deixar comentário.
+4. **Histórico testado**: restaurar uma nota antiga e um arquivo apagado.
+5. **Recuperação testada**: instalar num aparelho do zero usando só o código de
+   recuperação.
+
+**O dia da troca:**
+
+1. Desligar o Obsidian Sync em todos os aparelhos.
+2. Ligar o sync novo no vault real, a partir do Windows.
+3. Começar a contar os 14 dias com a assinatura ainda ativa. O vault remoto do Obsidian
+   fica como reserva nesse período.
+4. Nos 14 dias, se qualquer condição falhar, volta-se ao Obsidian Sync, corrige-se e
+   recomeça a contagem.
+5. Passados os 14 dias, cancelar.
+
+## 9. Números que não podem piorar
+
+| Medida                                                | Alvo     |
+| ----------------------------------------------------- | -------- |
+| Abrir o app até a última nota aparecer, desktop       | < 1 s    |
+| Abrir o app até a última nota aparecer, celular       | < 1,5 s  |
+| Edição num aparelho aparecer em outro, os dois online | < 5 s    |
+| Busca no vault inteiro                                | < 100 ms |
+| Abrir nota de 1 MB                                    | < 200 ms |
+| Montar o índice do vault do zero (844 notas, 82 HTML) | < 3 s    |
+| Primeira página de um PDF de 140 MB já baixado        | < 1 s    |
+
+## 10. Etapas
+
+Cada etapa entrega uma funcionalidade inteira, usável no dia a dia, e termina com o
+teste de aceite dela.
+
+### Etapa 1: monorepo
+
+Reorganizar o repositório na estrutura da seção 7, sem mudar comportamento. Extrair do
+código atual o que vira `packages/core`. CI rodando lint, tipos e testes de todos os
+pacotes.
+
+**Aceite:** o app desktop funciona igual a antes, e a release sai pelo workflow atual.
+
+### Etapa 2: vault compatível no desktop
+
+Tudo da seção 6.1.
+
+**Aceite:** o script de links não acha nada novo quebrado. As 20 notas mais abertas do
+Matheus, escolhidas por ele, abrem iguais ao Obsidian.
+
+### Etapa 3: HTML, PDF, código e Bases
+
+Seções 6.2, 6.3 e 6.4. O estado dos HTML já é gravado em `.markdown-viewer/state/`,
+pronto para sincronizar na etapa 5.
+
+**Aceite:** os três trackers favoritos funcionam e guardam progresso. Os manuais de
+140 MB abrem. As três Bases batem com o Obsidian.
+
+### Etapa 4: MCP do vault
+
+Seção 6.6, menos as ferramentas de comentário, que chegam na etapa 6. Registro no
+Claude Code e no app do Claude.
+
+**Aceite:** numa sessão real, o Claude acha uma nota pelo alias, roda uma Base e
+renomeia uma nota com os links atualizados.
+
+### Etapa 5: sync criptografado entre Mac e Windows
+
+Seção 6.5 inteira, nos dois desktops, numa **cópia** do vault.
+
+Inclui um teste de simulação: vários aparelhos virtuais fazendo edições, renomeações e
+exclusões aleatórias, offline e online, verificando ao fim que todos convergem e que
+nenhum texto sumiu. Esse teste roda no CI.
+
+**Aceite:** uma semana de uso real na cópia, sem perda. Os casos de conflito da seção
+6.5 testados à mão. Um PDF de 140 MB sincronizado.
+
+### Etapa 6: comentários
+
+Seção 6.7 no desktop: Revisor Visual no monorepo e embutido no HTML, comentário em
+Markdown, armazenamento em `.markdown-viewer/comments/`, ferramentas de comentário no
+MCP.
+
+**Aceite:** um ciclo completo. O Matheus comenta um HTML e uma nota, o Claude Code lê
+pelo MCP, faz as mudanças e responde, e o Matheus vê a resposta no app.
+
+### Etapa 7: Android de leitura
+
+Seção 6.8, no S25 Ultra e no Tab S10 FE, com comentários no toque.
+
+**Aceite:** as condições 1, 3 e 5 da linha de corte verdadeiras.
+
+### Etapa 8: a troca
+
+O dia da troca da seção 8 e os 14 dias de observação.
+
+**Aceite:** as cinco condições da linha de corte. **Cancelar o Obsidian Sync.**
+
+### Depois do corte
+
+Cada item ganha spec própria quando chegar a vez: edição no mobile, widgets, Galaxy
+Watch, tarefas e lembretes, Claude no celular pela ponte do desktop, Bases com edição.
+
+## 11. Em aberto
+
+- **Nome do app.** Decide o nome da pasta `.markdown-viewer/`, do pacote Android e do
+  identificador `ai.artell.markdown-viewer`. Melhor decidir antes da etapa 5, porque
+  depois do sync ligado a pasta já está em todos os aparelhos.
+- **Limites grátis do Durable Object**, conferidos no início da etapa 5.
+- **Master Arm.** O estado sincronizado dos HTML cobre parte do que o Master Arm faz com
+  os trackers. Decidir se os dois convivem ou se um absorve o outro.
