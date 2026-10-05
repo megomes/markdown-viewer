@@ -38,7 +38,7 @@ de lá baixando o instalador na mão.
 ### 2. Pôr a chave pública no app
 
 Cole o conteúdo de `~/.tauri/markdown-viewer.key.pub` no campo `pubkey` de
-`src-tauri/tauri.conf.json`, dentro de `plugins.updater`.
+`apps/desktop/src-tauri/tauri.conf.json`, dentro de `plugins.updater`.
 
 ### 3. Dar a chave privada ao CI
 
@@ -51,7 +51,7 @@ O `gh` pergunta a senha na segunda linha e não a mostra na tela.
 
 ## Publicar uma versão
 
-1. Suba o campo `version` de `src-tauri/tauri.conf.json`. **A tag e esse campo
+1. Suba o campo `version` de `apps/desktop/src-tauri/tauri.conf.json`. **A tag e esse campo
    têm que dizer o mesmo número**, e o workflow reprova antes de compilar se
    discordarem.
 2. Faça o commit e marque:

@@ -1,0 +1,21 @@
+{
+  "name": "@markdown-viewer/core",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "description": "Obsidian Markdown dialect, file model and base index, shared by every app.",
+  "exports": {
+    "./*": "./src/*.ts"
+  },
+  "scripts": {
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "@lezer/highlight": "^1.2.3",
+    "@lezer/markdown": "^1.7.2"
+  },
+  "devDependencies": {
+    "@codemirror/lang-markdown": "^6.5.2"
+  }
+}

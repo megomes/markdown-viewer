@@ -18,7 +18,7 @@ jobs:
       - name: Compara a tag com o tauri.conf.json
         run: |
           set -euo pipefail
-          config=$(node -p "require('./src-tauri/tauri.conf.json').version")
+          config=$(node -p "require('./apps/desktop/src-tauri/tauri.conf.json').version")
           tag="${GITHUB_REF_NAME#v}"
           if [ "$config" != "$tag" ]; then
             echo "::error::A tag diz $tag e o tauri.conf.json diz $config. Elas têm que bater."
@@ -63,7 +63,7 @@ jobs:
 
       - uses: swatinem/rust-cache@v2
         with:
-          workspaces: src-tauri
+          workspaces: apps/desktop/src-tauri
 
       # WebKitGTK and the AppImage packer only exist on the Linux runner. The
       # indicator is what draws the icon beside the clock there, and without it
@@ -105,6 +105,7 @@ jobs:
           TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
           TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
         with:
+          projectPath: apps/desktop
           tagName: ${{ github.ref_name }}
           releaseName: markdown-viewer __VERSION__
           releaseBody: Baixe abaixo o pacote do seu sistema.

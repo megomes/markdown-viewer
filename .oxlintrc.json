@@ -5,7 +5,7 @@
     "browser": true,
     "es2024": true
   },
-  "ignorePatterns": ["dist", "src-tauri", "node_modules"],
+  "ignorePatterns": ["**/dist", "**/src-tauri", "**/node_modules"],
   "categories": {
     "correctness": "error",
     "suspicious": "warn",
@@ -39,7 +39,7 @@
       }
     },
     {
-      "files": ["scripts/**"],
+      "files": ["**/scripts/**"],
       "env": {
         "node": true
       },
