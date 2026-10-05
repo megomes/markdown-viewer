@@ -35,6 +35,18 @@ export function relativePath(fromFile: string, toFile: string): string {
   return [...up, ...to.slice(common)].join('/')
 }
 
+/** Whether a wiki link names the file itself (by name or path), and not an alias of it. */
+function namesFile(target: string, path: string): boolean {
+  const stem = (p: string) => p.toLowerCase().replace(/\.(md|markdown|html?)$/i, '')
+  const wanted = stem(normalizePath(target))
+  const file = stem(path)
+  return (
+    file === wanted ||
+    file.endsWith('/' + wanted) ||
+    stem(path.slice(path.lastIndexOf('/') + 1)) === wanted
+  )
+}
+
 function wikiTarget(link: LinkRef, newPath: string, ctx: MoveContext): string {
   const isNote = NOTE_EXT.test(newPath)
   const name = newPath.slice(newPath.lastIndexOf('/') + 1)
@@ -101,6 +113,9 @@ export function rewriteLinks(
     const selfMoved = notePath !== newNotePath
     const isRelative = link.kind === 'markdown' || link.kind === 'markdown-image'
     if (after === before && !(selfMoved && isRelative)) continue
+    // A link that found the file by an alias still finds it after the move:
+    // the alias goes with the note. It is left as written.
+    if (!isRelative && !namesFile(link.target, before)) continue
 
     let target: string
     if (isRelative) {

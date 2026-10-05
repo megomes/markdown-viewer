@@ -75,3 +75,15 @@ describe('rewriteLinks', () => {
     expect(relativePath('n.md', 'a/c.md')).toBe('a/c.md')
   })
 })
+
+describe('apelidos', () => {
+  it('deixa como está o link que achou o arquivo pelo alias', () => {
+    const withAlias = createResolver(['Docs/Manual.md'], [['Guia', 'Docs/Manual.md']])
+    const out = rewriteLinks('[[Guia]] e [[Manual]]', 'x.md', 'x.md', {
+      moved: new Map([['Docs/Manual.md', 'Docs/Novo.md']]),
+      resolveBefore: (target, from) => withAlias.resolve(target, from),
+      nameIsAmbiguous: () => false,
+    })
+    expect(out).toBe('[[Guia]] e [[Novo]]')
+  })
+})
