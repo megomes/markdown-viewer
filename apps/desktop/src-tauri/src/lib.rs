@@ -57,6 +57,37 @@ fn allow_base(app: tauri::AppHandle, path: String) -> Result<(), String> {
         .map_err(|error| error.to_string())
 }
 
+const KEYCHAIN_SERVICE: &str = "markdown-viewer";
+
+/// Keeps a secret of the sync (the vault key, the device token) in the system
+/// keychain, never in a file.
+#[tauri::command]
+fn secret_set(name: String, value: String) -> Result<(), String> {
+    keyring::Entry::new(KEYCHAIN_SERVICE, &name)
+        .and_then(|entry| entry.set_password(&value))
+        .map_err(|error| error.to_string())
+}
+
+/// The secret, or nothing when it was never kept on this machine.
+#[tauri::command]
+fn secret_get(name: String) -> Result<Option<String>, String> {
+    let entry = keyring::Entry::new(KEYCHAIN_SERVICE, &name).map_err(|error| error.to_string())?;
+    match entry.get_password() {
+        Ok(value) => Ok(Some(value)),
+        Err(keyring::Error::NoEntry) => Ok(None),
+        Err(error) => Err(error.to_string()),
+    }
+}
+
+#[tauri::command]
+fn secret_delete(name: String) -> Result<(), String> {
+    let entry = keyring::Entry::new(KEYCHAIN_SERVICE, &name).map_err(|error| error.to_string())?;
+    match entry.delete_credential() {
+        Ok(()) | Err(keyring::Error::NoEntry) => Ok(()),
+        Err(error) => Err(error.to_string()),
+    }
+}
+
 /// Sends a path to the system trash. Nothing in this app deletes for good.
 #[tauri::command]
 fn move_to_trash(path: String) -> Result<(), String> {
@@ -155,6 +186,9 @@ pub fn run() {
         .invoke_handler(tauri::generate_handler![
             allow_base,
             move_to_trash,
+            secret_set,
+            secret_get,
+            secret_delete,
             reveal_in_file_manager,
             open_path,
             take_opened_paths,

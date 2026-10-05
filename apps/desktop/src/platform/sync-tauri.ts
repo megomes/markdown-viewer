@@ -1,0 +1,125 @@
+/**
+ * The sync engine's three ports on the desktop: the vault folder, the sync state
+ * (in the app's data folder, never inside the vault) and the keychain.
+ *
+ * Unlike the tree, the sync sees dot folders: `.obsidian` and `.markdown-viewer`
+ * travel too. Deleting goes to the system trash, as everywhere in this app.
+ */
+
+import { invoke } from '@tauri-apps/api/core'
+import { appDataDir, join } from '@tauri-apps/api/path'
+import { mkdir, readDir, readFile, remove, rename, stat, writeFile } from '@tauri-apps/plugin-fs'
+import type { LocalFiles, LocalStat, StateStore, SyncState } from '@markdown-viewer/sync/engine'
+import { IGNORE_FILE, ignoreMatcher } from '@markdown-viewer/sync/ignore'
+
+function joinPath(root: string, path: string): string {
+  const separator = root.includes('\\') ? '\\' : '/'
+  return root.replace(/[\\/]+$/, '') + separator + path.split('/').join(separator)
+}
+
+function parentOf(path: string): string {
+  return path.replace(/[\\/][^\\/]*$/, '')
+}
+
+export class TauriSyncFiles implements LocalFiles {
+  constructor(private readonly root: string) {}
+
+  async list(): Promise<LocalStat[]> {
+    let extra = ''
+    try {
+      extra = new TextDecoder().decode(await readFile(joinPath(this.root, IGNORE_FILE)))
+    } catch {
+      // no ignore file
+    }
+    const ignored = ignoreMatcher(extra)
+    const out: LocalStat[] = []
+    const walk = async (dir: string) => {
+      for (const entry of await readDir(dir ? joinPath(this.root, dir) : this.root)) {
+        const path = dir ? dir + '/' + entry.name : entry.name
+        if (ignored(path) || ignored(path + '/')) continue
+        if (entry.isDirectory) await walk(path)
+        else if (entry.isFile) {
+          const info = await stat(joinPath(this.root, path))
+          out.push({ path, size: info.size, mtime: info.mtime ? info.mtime.getTime() : 0 })
+        }
+      }
+    }
+    await walk('')
+    return out
+  }
+
+  async read(path: string): Promise<Uint8Array> {
+    return readFile(joinPath(this.root, path))
+  }
+
+  async write(path: string, bytes: Uint8Array): Promise<LocalStat> {
+    const full = joinPath(this.root, path)
+    await mkdir(parentOf(full), { recursive: true })
+    await writeFile(full, bytes)
+    const info = await stat(full)
+    return { path, size: info.size, mtime: info.mtime ? info.mtime.getTime() : 0 }
+  }
+
+  async remove(path: string): Promise<void> {
+    await invoke('move_to_trash', { path: joinPath(this.root, path) })
+  }
+
+  async move(from: string, to: string): Promise<void> {
+    const target = joinPath(this.root, to)
+    await mkdir(parentOf(target), { recursive: true })
+    await rename(joinPath(this.root, from), target)
+  }
+}
+
+/** `<app data>/sync/<vault>/state.json` and `base/<file id>`. */
+export async function stateFolder(vault: string): Promise<string> {
+  const base = await appDataDir()
+  await invoke('allow_base', { path: base })
+  const folder = await join(base, 'sync', vault)
+  await mkdir(folder, { recursive: true })
+  return folder
+}
+
+export class TauriStateStore implements StateStore {
+  constructor(private readonly folder: string) {}
+
+  async load(): Promise<SyncState | null> {
+    try {
+      return JSON.parse(
+        new TextDecoder().decode(await readFile(joinPath(this.folder, 'state.json'))),
+      ) as SyncState
+    } catch {
+      return null
+    }
+  }
+
+  async save(state: SyncState): Promise<void> {
+    const temp = joinPath(this.folder, 'state.json.tmp')
+    await writeFile(temp, new TextEncoder().encode(JSON.stringify(state)))
+    await rename(temp, joinPath(this.folder, 'state.json'))
+  }
+
+  async getBase(fileId: string): Promise<Uint8Array | null> {
+    try {
+      return await readFile(joinPath(this.folder, 'base/' + fileId))
+    } catch {
+      return null
+    }
+  }
+
+  async setBase(fileId: string, bytes: Uint8Array | null): Promise<void> {
+    const file = joinPath(this.folder, 'base/' + fileId)
+    if (!bytes) {
+      await remove(file).catch(() => {})
+      return
+    }
+    await mkdir(parentOf(file), { recursive: true })
+    await writeFile(file, bytes)
+  }
+}
+
+export const secrets = {
+  get: (name: string) => invoke<string | null>('secret_get', { name }),
+  set: (name: string, value: string) => invoke<void>('secret_set', { name, value }),
+  delete: (name: string) => invoke<void>('secret_delete', { name }),
+}

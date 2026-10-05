@@ -36,6 +36,9 @@ tauri-plugin-fs = "2"
 tauri-plugin-opener = "2"
 tauri-plugin-dialog = "2"
 trash = "5"
+# The vault key and the device token of the sync live in the system keychain:
+# Keychain on macOS, Credential Manager on Windows, the kernel keyring on Linux.
+keyring = { version = "3", features = ["apple-native", "windows-native", "linux-native"] }
 tauri-plugin-process = "2"
 
 # The updater does not build for mobile, and this app has no mobile target.

@@ -60,7 +60,9 @@ import { readBookmarks, type Bookmark } from '~/app/bookmarks'
 import { QuickOpen } from './QuickOpen'
 import { SearchPanel } from './SearchPanel'
 import { openTarget } from '~/editor/links'
-import { MessageSquareText } from 'lucide-react'
+import { Cloud, CloudAlert, CloudOff, MessageSquareText, RefreshCw } from 'lucide-react'
+import { SyncPanel } from './SyncPanel'
+import { startSync, useSync } from '~/app/sync'
 import { SidebarResizer } from './SidebarResizer'
 import { canPrint, printHtml } from './print'
 import { installWindowDrag } from './window-drag'
@@ -113,6 +115,12 @@ export function App() {
   const [settingsOpen, setSettingsOpen] = useState(false)
   const [feedbackOpen, setFeedbackOpen] = useState(false)
   const [quickOpen, setQuickOpen] = useState(false)
+  const [syncOpen, setSyncOpen] = useState(false)
+  const sync = useSync()
+  // The sync starts with the app, when this device was set up for it.
+  useEffect(() => {
+    void startSync()
+  }, [])
   const [folderIcons, setFolderIcons] = useState<Record<string, string>>({})
   const [bookmarks, setBookmarks] = useState<Bookmark[]>([])
   const [searchOpen, setSearchOpen] = useState(false)
@@ -1037,6 +1045,31 @@ export function App() {
           </button>
           <button
             type="button"
+            className={'icon-button sync-indicator is-' + sync.status + (syncOpen ? ' is-on' : '')}
+            aria-label="Sincronização"
+            title={
+              sync.status === 'off'
+                ? 'Sincronização desligada'
+                : sync.status === 'error'
+                  ? 'Sincronização parou: ' + (sync.message ?? '')
+                  : sync.status === 'syncing'
+                    ? 'Sincronizando…'
+                    : 'Sincronizado'
+            }
+            onClick={() => setSyncOpen((open) => !open)}
+          >
+            {sync.status === 'syncing' ? (
+              <RefreshCw size={16} strokeWidth={1.75} />
+            ) : sync.status === 'error' ? (
+              <CloudAlert size={16} strokeWidth={1.75} />
+            ) : sync.status === 'off' || sync.status === 'offline' ? (
+              <CloudOff size={16} strokeWidth={1.75} />
+            ) : (
+              <Cloud size={16} strokeWidth={1.75} />
+            )}
+          </button>
+          <button
+            type="button"
             className="icon-button"
             aria-label={dark ? 'Usar o tema claro' : 'Usar o tema escuro'}
             title={dark ? 'Usar o tema claro' : 'Usar o tema escuro'}
@@ -1444,6 +1477,14 @@ export function App() {
           body={question.body}
           choices={question.choices}
           onCancel={() => setQuestion(null)}
+        />
+      )}
+
+      {syncOpen && (
+        <SyncPanel
+          bases={state.bases}
+          activePath={activeTab ? { baseId: activeTab.baseId, path: activeTab.path } : null}
+          onClose={() => setSyncOpen(false)}
         />
       )}
 

@@ -3000,3 +3000,213 @@ html[data-window='dock'] .chip {
   background: var(--surface-hover);
   color: var(--text-primary);
 }
+
+/* ------------------------------------------------------------------ sync */
+
+.sync-indicator.is-syncing svg {
+  animation: sync-spin 1.2s linear infinite;
+}
+
+.sync-indicator.is-error {
+  color: var(--tone-red);
+}
+
+@keyframes sync-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+.sync-panel {
+  display: flex;
+  flex-direction: column;
+  width: min(560px, calc(100vw - 32px));
+  max-height: 80vh;
+  overflow: auto;
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-lg);
+  background: var(--surface-1);
+  box-shadow: 0 20px 60px rgb(0 0 0 / 0.35);
+}
+
+.sync-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 12px 16px;
+  border-bottom: 1px solid var(--border-subtle);
+}
+
+.sync-head h2 {
+  margin: 0;
+  font-size: 15px;
+}
+
+.sync-body {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 14px 16px 18px;
+  font-size: 13px;
+}
+
+.sync-field {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  color: var(--text-tertiary);
+  font-size: 12px;
+}
+
+.sync-field input,
+.sync-field select {
+  padding: 7px 9px;
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-sm);
+  outline: 0;
+  background: var(--bg-content);
+  color: var(--text-primary);
+  font: inherit;
+  font-size: 13px;
+}
+
+.sync-field input:focus,
+.sync-field select:focus {
+  border-color: var(--accent);
+}
+
+.sync-primary {
+  align-self: flex-start;
+  padding: 7px 14px;
+  border: 0;
+  border-radius: var(--radius-md);
+  background: var(--accent);
+  color: var(--accent-on);
+  font: inherit;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.sync-primary:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
+.sync-note {
+  margin: 0;
+  color: var(--text-tertiary);
+}
+
+.sync-strong {
+  margin: 0;
+  font-weight: 600;
+}
+
+.sync-warning {
+  margin: 0;
+  padding: 8px 10px;
+  border: 1px solid color-mix(in srgb, var(--tone-orange) 40%, var(--border-default));
+  border-radius: var(--radius-md);
+  background: color-mix(in srgb, var(--tone-orange) 10%, var(--surface-1));
+  color: var(--text-secondary);
+  font-size: 12px;
+}
+
+.sync-error {
+  margin: 0;
+  color: var(--tone-red);
+}
+
+.sync-code {
+  margin: 0;
+  font-family: var(--font-mono);
+  font-size: 17px;
+  letter-spacing: 0.04em;
+  user-select: all;
+}
+
+.sync-status {
+  margin: 0;
+  font-weight: 600;
+}
+
+.sync-status.is-error {
+  color: var(--tone-red);
+}
+
+.sync-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.sync-pairing {
+  display: flex;
+  gap: 14px;
+  align-items: center;
+  padding: 10px;
+  border-radius: var(--radius-md);
+  background: var(--bg-content);
+}
+
+.sync-pairing img {
+  width: 140px;
+  height: 140px;
+  border-radius: 6px;
+  background: #fff;
+}
+
+.sync-list {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.sync-list li {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  justify-content: space-between;
+  padding: 5px 8px;
+  border-radius: var(--radius-sm);
+  background: var(--bg-content);
+}
+
+.sync-list small,
+.sync-activity small {
+  color: var(--text-tertiary);
+}
+
+.sync-activity ul {
+  max-height: 220px;
+  margin: 6px 0 0;
+  padding: 0;
+  overflow: auto;
+  list-style: none;
+  font-size: 12px;
+}
+
+.sync-activity li span {
+  display: inline-block;
+  min-width: 70px;
+  color: var(--text-tertiary);
+}
+
+.sync-activity li.is-conflict span {
+  color: var(--tone-orange);
+}
+
+.sync-leave {
+  align-self: flex-start;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--text-tertiary);
+  font: inherit;
+  font-size: 12px;
+  text-decoration: underline;
+  cursor: pointer;
+}
