@@ -90,6 +90,7 @@ mantém.
 - Histórico de versões sem prazo para texto.
 - MCP do vault para o Claude.
 - Comentários para o Claude, no desktop e no celular, com o Revisor Visual embutido.
+- Feedback do app, igual à tela Notes do DailyFlow.
 - App Android de leitura, no celular e no tablet.
 
 ### Depois do corte, em ordem provável
@@ -184,7 +185,7 @@ grupos que no Obsidian.
 O Durable Object por vault resolve de graça o problema mais difícil de um sync, que é
 ordenar os commits de vários aparelhos sem corrida. Se os limites grátis dele não
 servirem, os metadados vão para o D1. A conferência dos limites é a primeira tarefa da
-etapa 5.
+etapa 6.
 
 **Arquivos em pedaços.** Cada arquivo é quebrado em pedaços de tamanho variável, em
 torno de 4 MB, por chunking definido pelo conteúdo. Cada pedaço é criptografado e sobe
@@ -359,8 +360,88 @@ Celular e tablet, só leitura nesta primeira versão.
 - Leitura de Markdown com a mesma renderização do desktop.
 - HTML com estado sincronizado, PDF baixado sob demanda, Bases, imagens, código.
 - Comentários, com o Revisor no toque.
+- Feedback do app (seção 6.9).
 - Funciona offline com o que já foi baixado.
 - No tablet, árvore e nota lado a lado.
+
+### 6.9 Feedback do app
+
+Uma tela para relatar bug, ideia, problema de UX ou dúvida **sobre o próprio app**, no
+momento em que a coisa acontece, de qualquer aparelho. O Claude que trabalha neste
+repositório lê a fila, implementa e registra exatamente o que fez. O Matheus testa e
+confirma com 👍 ou reabre com 👎 e um comentário.
+
+Não confundir com os comentários da seção 6.7: aqueles são sobre o **conteúdo do vault**
+e quem trata é o Claude que trabalha no vault. O feedback é sobre o **app**, e quem trata
+é o Claude que trabalha neste repositório.
+
+**A referência é a tela Notes do DailyFlow, e ela deve ser reproduzida exatamente**:
+mesmo layout, mesmos componentes, mesmos estados, mesmo comportamento, mesmos atalhos e
+o mesmo modelo de dados. A implementação de referência é o commit `3fd41c3` de
+`github.com/megomes/dailyflow`:
+
+| Arquivo no DailyFlow                                                    | O que define                                                        |
+| ----------------------------------------------------------------------- | ------------------------------------------------------------------- |
+| `web/src/app/(app)/notes/page.tsx`                                      | A tela inteira: compositor, filtros, cartão, verificação, histórico |
+| `web/src/app/api/notes/route.ts`                                        | Listar com histórico, criar                                         |
+| `web/src/app/api/notes/[id]/route.ts`                                   | Editar, confirmar, reabrir, excluir, e o 409 quando não pode        |
+| `web/db/schema.sql`, tabelas `notes` e `note_log`, função `note_claude` | O modelo de dados e a entrada do Claude                             |
+| `web/src/lib/clientContext.ts`                                          | O contexto do aparelho gravado em cada nota                         |
+| `web/src/i18n/en.ts`, bloco `notes`                                     | Os textos                                                           |
+| `web/src/app/globals.css`, regras de `.notes-page` a `.note.s-archived` | O visual                                                            |
+| `CLAUDE.md`, seção "Notas do app"                                       | Como o Claude trabalha a fila                                       |
+
+**O que a tela faz**, resumido do DailyFlow:
+
+- **Compositor** no topo: caixa de texto, tipo (Bug, Ideia, UX, Pergunta, com Ideia
+  como padrão), atalho `⌘↵`/`Ctrl+↵` para adicionar. A dica do atalho some em tela de
+  toque.
+- **Filtros** em botões segmentados com contagem: Todas, Abertas (inclui Em discussão),
+  Em andamento, Feitas, Ignoradas. Botão "Arquivadas · N" à direita, que troca a lista
+  pelas confirmadas, com "Voltar".
+- **Cartão** de cada nota: `#id`, pílula do tipo, pílula do status, data, e uma linha
+  com o resumo do aparelho onde foi escrita. Enquanto aberta, "Editar" e "Excluir";
+  excluir pede um segundo clique em até 4 segundos.
+- **Resolução** escrita pelo Claude: o que foi feito, feito, decidido não fazer,
+  decisões, próximos passos, commits como links e quando foi publicado.
+- **Verificação** quando a nota está Feita ou Ignorada: "Testou?" com 👍 Funciona, que
+  arquiva, e 👎 Ainda não, que pede um comentário e reabre.
+- **Seu retorno**: o último comentário do 👎 aparece em destaque até o Claude entregar
+  de novo.
+- **Histórico** recolhível com cada evento, quem fez (Você ou Claude), o texto anterior
+  nas edições, e o "Debug info" com o contexto completo em JSON.
+- **Offline**: a nota fica numa fila local, aparece tracejada com "Aguardando conexão",
+  e sobe quando a conexão volta, marcada com `queuedOffline`.
+- **Regras**: id sequencial que nunca se reutiliza, exclusão lógica, editar e excluir só
+  com a nota aberta (senão 409 e o aviso de que precisa reabrir), o texto é do usuário e
+  o Claude nunca altera, e só o 👍 do usuário arquiva.
+
+**As únicas adaptações**, porque o ambiente é outro:
+
+| No DailyFlow                      | Aqui                                                                                                                               |
+| --------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------- |
+| Nome "Notes"                      | "Feedback", porque "nota" aqui é nota do vault                                                                                     |
+| Textos em inglês                  | Em português, como o resto do app, traduzidos um a um do bloco `notes`                                                             |
+| Página no menu de navegação       | Botão fixo na barra lateral no desktop e na barra inferior no celular, mais atalho, para abrir de qualquer tela sem perder o lugar |
+| Neon e rotas da Vercel            | Worker da Cloudflare com D1 (`services/feedback`), mesmo schema em SQLite                                                          |
+| Função `note_claude` no Postgres  | Script `npm run feedback -- <id> <status ou -> "<mensagem>" '<resolução json>'`, que faz o mesmo numa transação do D1              |
+| Contexto: `pwa` ou `browser`      | `desktop-tauri` ou `android-expo`, com versão do app, sistema, aparelho, tela, rede, estado do sync e a tela de origem             |
+| Tela de origem (rota)             | Tipo de visualização (editor, HTML, PDF, Base, configurações) e extensão do arquivo aberto, **sem o caminho**                      |
+| Commits linkando para o dailyflow | Linkando para `megomes/markdown-viewer`                                                                                            |
+| "Deployed" com data da Vercel     | Versão da release em que a correção saiu                                                                                           |
+| Acesso por código + aparelho      | Token do aparelho; depois da etapa 6, o mesmo do pareamento do sync                                                                |
+
+O visual usa os tokens de tema deste app no lugar das variáveis do DailyFlow, mantendo
+a mesma estrutura, espaçamentos e cores relativas (vermelho para bug, amarelo para
+ideia, roxo para UX, ciano para pergunta).
+
+**Sem criptografia de ponta a ponta, de propósito.** O Claude precisa ler a fila de
+qualquer sessão neste repositório, e o conteúdo é sobre o app, não sobre o vault. Por
+isso o contexto grava o tipo de tela e a extensão, mas nunca o caminho nem o nome do
+arquivo que estava aberto.
+
+O `CLAUDE.md` deste repositório ganha a seção "Feedback do app", espelho da seção
+"Notas do app" do DailyFlow, trocando o SQL do Neon pelo D1 e pelo script.
 
 ## 7. Arquitetura
 
@@ -376,6 +457,7 @@ Celular e tablet, só leitura nesta primeira versão.
 | `packages/revisor-host` | O anfitrião do Revisor Visual no app. O Revisor em si vem das releases dele (seção 6.7)                          |
 | `packages/mcp`          | O servidor MCP do vault                                                                                          |
 | `services/sync`         | Worker e Durable Object da Cloudflare                                                                            |
+| `services/feedback`     | Worker e D1 do feedback do app (seção 6.9)                                                                       |
 
 O motor de sync e o índice são TypeScript puro, sem depender de Tauri nem de Expo. Cada
 app fornece só a camada de arquivo, de cofre de chave e de rede.
@@ -388,7 +470,7 @@ app fornece só a camada de arquivo, de cofre de chave e de rede.
 
 **Pasta `.markdown-viewer/`** na raiz do vault: estado dos HTML, sessões e versão baixada
 do Revisor, regras de ignorar. O Obsidian esconde pastas que começam com ponto. O nome muda quando o app ganhar
-nome (ver seção 10).
+nome (ver seção 11).
 
 ## 8. A linha de corte
 
@@ -440,30 +522,40 @@ pacotes.
 
 **Aceite:** o app desktop funciona igual a antes, e a release sai pelo workflow atual.
 
-### Etapa 2: vault compatível no desktop
+### Etapa 2: feedback do app
+
+Seção 6.9 no desktop: `services/feedback` no ar, a tela igual à do DailyFlow, o script
+do Claude e a seção no `CLAUDE.md`. Vem logo no começo para que todas as etapas
+seguintes já sejam relatadas e corrigidas por ela.
+
+**Aceite:** comparação lado a lado com a tela do DailyFlow, item a item da seção 6.9. Um
+ciclo completo: o Matheus relata do Mac, o Claude implementa e entrega, o Matheus
+confirma com 👍 do Windows. Uma nota escrita offline sobe quando a rede volta.
+
+### Etapa 3: vault compatível no desktop
 
 Tudo da seção 6.1.
 
 **Aceite:** o script de links não acha nada novo quebrado. As 20 notas mais abertas do
 Matheus, escolhidas por ele, abrem iguais ao Obsidian.
 
-### Etapa 3: HTML, PDF, código e Bases
+### Etapa 4: HTML, PDF, código e Bases
 
 Seções 6.2, 6.3 e 6.4. O estado dos HTML já é gravado em `.markdown-viewer/state/`,
-pronto para sincronizar na etapa 5.
+pronto para sincronizar na etapa 6.
 
 **Aceite:** os três trackers favoritos funcionam e guardam progresso. Os manuais de
 140 MB abrem. As três Bases batem com o Obsidian.
 
-### Etapa 4: MCP do vault
+### Etapa 5: MCP do vault
 
-Seção 6.6, menos as ferramentas de comentário, que chegam na etapa 6. Registro no
+Seção 6.6, menos as ferramentas de comentário, que chegam na etapa 7. Registro no
 Claude Code e no app do Claude.
 
 **Aceite:** numa sessão real, o Claude acha uma nota pelo alias, roda uma Base e
 renomeia uma nota com os links atualizados.
 
-### Etapa 5: sync criptografado entre Mac e Windows
+### Etapa 6: sync criptografado entre Mac e Windows
 
 Seção 6.5 inteira, nos dois desktops, numa **cópia** do vault.
 
@@ -474,7 +566,7 @@ nenhum texto sumiu. Esse teste roda no CI.
 **Aceite:** uma semana de uso real na cópia, sem perda. Os casos de conflito da seção
 6.5 testados à mão. Um PDF de 140 MB sincronizado.
 
-### Etapa 6: comentários
+### Etapa 7: comentários
 
 Duas partes, nesta ordem.
 
@@ -490,13 +582,13 @@ ferramentas de comentário no MCP.
 pelo MCP, aplica e marca, e o Matheus confere no app. Depois, uma release nova do
 Revisor chega ao app pelo botão, sem release nova do app.
 
-### Etapa 7: Android de leitura
+### Etapa 8: Android de leitura
 
 Seção 6.8, no S25 Ultra e no Tab S10 FE, com comentários no toque.
 
 **Aceite:** as condições 1, 3 e 5 da linha de corte verdadeiras.
 
-### Etapa 8: a troca
+### Etapa 9: a troca
 
 O dia da troca da seção 8 e os 14 dias de observação.
 
@@ -510,8 +602,8 @@ Watch, tarefas e lembretes, Claude no celular pela ponte do desktop, Bases com e
 ## 11. Em aberto
 
 - **Nome do app.** Decide o nome da pasta `.markdown-viewer/`, do pacote Android e do
-  identificador `ai.artell.markdown-viewer`. Melhor decidir antes da etapa 5, porque
+  identificador `ai.artell.markdown-viewer`. Melhor decidir antes da etapa 6, porque
   depois do sync ligado a pasta já está em todos os aparelhos.
-- **Limites grátis do Durable Object**, conferidos no início da etapa 5.
+- **Limites grátis do Durable Object**, conferidos no início da etapa 6.
 - **Master Arm.** O estado sincronizado dos HTML cobre parte do que o Master Arm faz com
   os trackers. Decidir se os dois convivem ou se um absorve o outro.
