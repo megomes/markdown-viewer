@@ -91,6 +91,7 @@ export function menuPlan({ recents, hasDocument, apple }: MenuInput): MenuNode[]
             { kind: 'native', label: 'Sobre', item: 'About' },
             { kind: 'separator' },
             item('Ajustes', 'settings'),
+            item('Feedback do app', 'feedback'),
             { kind: 'separator' },
             { kind: 'native', label: 'Serviços', item: 'Services' },
             { kind: 'separator' },
@@ -134,6 +135,7 @@ export function menuPlan({ recents, hasDocument, apple }: MenuInput): MenuNode[]
           : [
               { kind: 'separator' as const },
               item('Ajustes', 'settings'),
+              item('Feedback do app', 'feedback'),
               { kind: 'native' as const, label: 'Sair', item: 'Quit' as const },
             ]),
       ],

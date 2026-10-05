@@ -19,6 +19,7 @@ export type ShortcutId =
   | 'togglePin'
   | 'toggleDock'
   | 'settings'
+  | 'feedback'
   | 'print'
   | 'zoomIn'
   | 'zoomOut'
@@ -51,6 +52,7 @@ export const SHORTCUTS: Shortcut[] = [
   { id: 'togglePin', label: 'Fixar na barra de notas', key: 'p', mod: true, shift: true },
   { id: 'toggleDock', label: 'Barra de notas fixadas', key: 'd', mod: true, shift: true },
   { id: 'settings', label: 'Ajustes', key: ',', mod: true },
+  { id: 'feedback', label: 'Feedback do app', key: 'b', mod: true, shift: true },
   { id: 'print', label: 'Imprimir', key: 'p', mod: true },
   { id: 'zoomIn', label: 'Aumentar a interface', key: '=', mod: true },
   { id: 'zoomOut', label: 'Diminuir a interface', key: '-', mod: true },

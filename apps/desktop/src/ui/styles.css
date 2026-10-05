@@ -799,6 +799,7 @@ a:focus-visible,
 /* ------------------------------------------------------------ workspace */
 
 .workspace {
+  position: relative;
   grid-column: 3;
   display: flex;
   flex-direction: column;

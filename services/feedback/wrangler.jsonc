@@ -1,0 +1,19 @@
+{
+  "$schema": "../../node_modules/wrangler/config-schema.json",
+  "name": "markdown-viewer-feedback",
+  "main": "src/index.ts",
+  "compatibility_date": "2026-10-01",
+  "workers_dev": true,
+  "preview_urls": false,
+  "d1_databases": [
+    {
+      "binding": "DB",
+      "database_name": "markdown-viewer-feedback",
+      "database_id": "0d65b39c-f286-4765-8b65-c7a0f242f911",
+      "migrations_dir": "migrations",
+    },
+  ],
+  // Which build answered: lands in every note's server context.
+  "version_metadata": { "binding": "VERSION" },
+  // ACCESS_HASH (secret): SHA-256 em hex do código de acesso. Ver README.md.
+}

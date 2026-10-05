@@ -52,6 +52,8 @@ import { centreOf, changeTheme } from './theme-transition'
 import { UpdateNotice } from './UpdateNotice'
 import { Recents } from './Recents'
 import { SettingsWindow } from './SettingsWindow'
+import { Feedback } from './Feedback'
+import { MessageSquareText } from 'lucide-react'
 import { SidebarResizer } from './SidebarResizer'
 import { canPrint, printHtml } from './print'
 import { installWindowDrag } from './window-drag'
@@ -102,6 +104,7 @@ export function App() {
   const theme = useResolvedTheme(settings.themeMode)
   const [sidebarOpen, setSidebarOpen] = useState(() => loadSession()?.sidebarOpen ?? true)
   const [settingsOpen, setSettingsOpen] = useState(false)
+  const [feedbackOpen, setFeedbackOpen] = useState(false)
   const [measuring, setMeasuring] = useState(false)
   const [menu, setMenu] = useState<{ items: MenuItem[]; x: number; y: number } | null>(null)
   const restore = actions.restoreSession
@@ -884,6 +887,9 @@ export function App() {
           case 'settings':
             setSettingsOpen((open) => !open)
             break
+          case 'feedback':
+            setFeedbackOpen((open) => !open)
+            break
           case 'print': {
             // The browser would otherwise print the interface itself.
             if (!activeId) return
@@ -969,6 +975,18 @@ export function App() {
             onClick={() => setSettingsOpen((open) => !open)}
           >
             <SettingsIcon size={16} />
+          </button>
+          <button
+            type="button"
+            className={'icon-button' + (feedbackOpen ? ' is-on' : '')}
+            aria-label="Feedback do app"
+            title={
+              'Feedback do app (' + keyCap(SHORTCUTS.find((one) => one.id === 'feedback')!) + ')'
+            }
+            aria-pressed={feedbackOpen}
+            onClick={() => setFeedbackOpen((open) => !open)}
+          >
+            <MessageSquareText size={16} strokeWidth={1.75} />
           </button>
           <button
             type="button"
@@ -1291,6 +1309,13 @@ export function App() {
           />
         )}
 
+        {feedbackOpen && (
+          <Feedback
+            screen={feedbackScreen(settingsOpen, activeTab)}
+            onClose={() => setFeedbackOpen(false)}
+          />
+        )}
+
         <StatusBar
           tab={activeTab}
           doc={activeDoc}
@@ -1396,6 +1421,17 @@ function EmptyState({ hasBase, onOpenBase, onOpenFile }: EmptyStateProps) {
 function liveOf(doc: Doc | undefined): LiveDoc | undefined {
   if (!doc) return undefined
   return { text: doc.text, shape: doc.shape, version: doc.version, dirty: doc.dirty }
+}
+
+/**
+ * Where a feedback note was written from: the kind of view and the extension of
+ * the file in it. Never the path or the name, which stay out of the cloud.
+ */
+function feedbackScreen(settingsOpen: boolean, tab: Tab | null | undefined): string {
+  if (settingsOpen) return 'settings'
+  if (!tab) return 'empty'
+  const dot = tab.name.lastIndexOf('.')
+  return 'editor:' + (dot > 0 ? tab.name.slice(dot).toLowerCase() : 'draft')
 }
 
 /** A file opened from outside every folder, which is a base of its own. */

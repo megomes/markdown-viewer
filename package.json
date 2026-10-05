@@ -4,7 +4,8 @@
   "type": "module",
   "workspaces": [
     "apps/*",
-    "packages/*"
+    "packages/*",
+    "services/*"
   ],
   "scripts": {
     "dev": "npm run dev -w apps/desktop",
@@ -18,7 +19,8 @@
     "build": "npm run build --workspaces --if-present",
     "verify": "oxlint && npm run typecheck && npm test && npm run build",
     "format": "prettier --write .",
-    "format:check": "prettier --check ."
+    "format:check": "prettier --check .",
+    "feedback": "node services/feedback/scripts/feedback.mjs"
   },
   "devDependencies": {
     "oxlint": "^1.83.0",
