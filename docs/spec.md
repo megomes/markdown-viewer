@@ -369,6 +369,16 @@ Celular e tablet, só leitura nesta primeira versão.
 
 ### 6.9 Feedback do app
 
+> **Desde 2026-10-06 o feedback é o feedback-kit** (`github.com/megomes/feedback-kit`,
+> privado), compartilhado por todos os apps do Matheus: um Worker com D1 para todos, o
+> painel como Web Component (`<feedback-panel>`) carregado do Worker, e a skill e o CLI
+> do Claude. O comportamento abaixo continua valendo; o que mudou é onde ele mora. O
+> `services/feedback` saiu deste repositório, as notas foram para o banco do kit com os
+> mesmos números, e este app só abre o painel, mapeia os tokens do tema nos `--fb-*` e
+> informa versão e etapa. Melhorias no painel ou nas regras da fila se fazem no kit e
+> chegam a todos os apps. O "Seu retorno" abaixo virou a conversa inteira embaixo da
+> nota (cada 👎 e cada entrega, em ordem), como no DailyFlow.
+
 Uma tela para relatar bug, ideia, problema de UX ou dúvida **sobre o próprio app**, no
 momento em que a coisa acontece, de qualquer aparelho. O Claude que trabalha neste
 repositório lê a fila, implementa e registra exatamente o que fez. O Matheus testa e
@@ -500,7 +510,6 @@ imagens) decifrados do cache local.
 | `packages/revisor-host` | O anfitrião do Revisor Visual no app. O Revisor em si vem das releases dele (seção 6.7)                          |
 | `packages/mcp`          | O servidor MCP do vault                                                                                          |
 | `services/sync`         | Worker e Durable Object da Cloudflare                                                                            |
-| `services/feedback`     | Worker e D1 do feedback do app (seção 6.9)                                                                       |
 
 O motor de sync e o índice são TypeScript puro, sem depender de Tauri nem de Expo. Cada
 app fornece só a camada de arquivo, de cofre de chave e de rede.

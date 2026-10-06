@@ -6,12 +6,6 @@
       "runtimeExecutable": "npm",
       "runtimeArgs": ["run", "dev"],
       "port": 5273
-    },
-    {
-      "name": "feedback-worker",
-      "runtimeExecutable": "npm",
-      "runtimeArgs": ["run", "dev", "-w", "@markdown-viewer/feedback-service"],
-      "port": 8787
     }
   ]
 }

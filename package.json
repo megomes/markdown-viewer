@@ -20,7 +20,7 @@
     "verify": "oxlint && npm run typecheck && npm test && npm run build",
     "format": "prettier --write .",
     "format:check": "prettier --check .",
-    "feedback": "node services/feedback/scripts/feedback.mjs",
+    "feedback": "node ../feedback-kit/cli/feedback.mjs",
     "vault:check": "tsx packages/core/scripts/vault-check.ts",
     "base:check": "tsx packages/core/scripts/base-check.ts",
     "sync:device": "tsx packages/sync/scripts/device.ts"
