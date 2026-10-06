@@ -224,9 +224,10 @@ export const editorTheme = EditorView.theme({
     color: 'var(--text-secondary)',
   },
   '.cm-md-chip': {
-    padding: '1px 8px',
-    borderRadius: '999px',
-    background: 'color-mix(in srgb, var(--accent) 13%, transparent)',
+    padding: '0 8px',
+    border: '1px dashed color-mix(in srgb, var(--accent) 60%, transparent)',
+    borderRadius: '6px',
+    background: 'color-mix(in srgb, var(--accent) 10%, transparent)',
     color: 'var(--accent-text)',
     fontSize: '0.94em',
     fontWeight: '500',

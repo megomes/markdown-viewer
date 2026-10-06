@@ -32,11 +32,17 @@ function Icon({ size = 17, children, ...rest }: IconProps & { children: ReactNod
 export function BrandMark({ size = 22 }: { size?: number }) {
   return (
     <svg viewBox="0 0 24 24" width={size} height={size} aria-hidden="true">
-      <rect x="2" y="2" width="20" height="20" rx="6" fill="var(--accent)" />
+      <defs>
+        <linearGradient id="brand-fill" x1="0" y1="0" x2="0" y2="1">
+          <stop offset="0" stopColor="var(--brand)" />
+          <stop offset="1" stopColor="var(--brand-deep)" />
+        </linearGradient>
+      </defs>
+      <rect x="2" y="2" width="20" height="20" rx="6" fill="url(#brand-fill)" />
       <path
         d="M7.5 16.5V8.2c0-.3.4-.5.6-.2l3.4 4.2c.2.3.6.3.8 0l3.4-4.2c.2-.3.6-.1.6.2v8.3"
         fill="none"
-        stroke="var(--accent-on)"
+        stroke="#ffffff"
         strokeWidth="1.8"
         strokeLinecap="round"
         strokeLinejoin="round"

@@ -1403,7 +1403,6 @@ export function App() {
             canMoveToVault={!!vault && state.bases.some((base) => base.id === vault)}
             onActivate={actions.activateTab}
             onMoveToVault={(tab) => void moveToVault(tab)}
-            onOpenFile={() => void actions.openLooseFile()}
           />
         )}
 

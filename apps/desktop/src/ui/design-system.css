@@ -1,0 +1,554 @@
+/*
+ * The design system, as a layer over styles.css.
+ *
+ * styles.css describes what each piece of the interface is and how it is laid
+ * out; this file says what it looks like. The reference is a dark, deep indigo
+ * interface where every region is a floating card: a black frame, panels with
+ * a hairline border and a light that comes from above, one warm accent (coral
+ * red) for what is chosen, one cold one (indigo) for the brand and the glow,
+ * green only for "on", and white for the single primary action on a screen.
+ * The full description is in docs/design-system.md.
+ *
+ * It is imported after styles.css, so a rule here wins over the one there with
+ * the same selector. Tokens first, then the pieces, from the frame inwards.
+ */
+
+/* ---------------------------------------------------------------- tokens */
+
+:root {
+  --radius-sm: 8px;
+  --radius-md: 10px;
+  --radius-lg: 12px;
+  --radius-xl: 16px;
+  --radius-pill: 999px;
+
+  --ease: 160ms cubic-bezier(0.2, 0, 0, 1);
+}
+
+:root[data-theme='dark'] {
+  /* The frame is black; the panels float on it. */
+  --bg-app: #050508;
+  --bg-sidebar: #0c0c17;
+  --bg-content: #0a0a14;
+
+  --surface-1: #11111e;
+  --surface-2: #161627;
+  --surface-3: #1c1c31;
+  --surface-hover: #1f1f37;
+
+  --border-subtle: #1b1b2b;
+  --border-default: #262639;
+  --border-emphasis: #363650;
+
+  --text-primary: #f4f4f8;
+  --text-secondary: #a7a7b9;
+  --text-tertiary: #6e6e82;
+  --text-disabled: #4c4c5e;
+
+  /* Coral red: what is chosen, what needs attention, the caret. */
+  --accent: #ff4d4f;
+  --accent-hover: #ff6668;
+  --accent-muted: #8c2a30;
+  --accent-on: #ffffff;
+  --accent-text: #ff7b7d;
+
+  /* Indigo: the brand and the light behind the panels. Never for state. */
+  --brand: #6b68f5;
+  --brand-deep: #3b39a8;
+  --glow: rgb(98 92 230 / 0.2);
+
+  /* Green means one thing: switched on. */
+  --positive: #34d27b;
+
+  /* The single primary action on a screen is white, not coloured. */
+  --primary-bg: #f4f4f8;
+  --primary-bg-hover: #ffffff;
+  --primary-text: #0b0b12;
+
+  /* Panels: a hairline, a lit top edge and a soft fall-off. */
+  --panel-bg: linear-gradient(180deg, #141428 0%, #0c0c17 34%, #0b0b15 100%);
+  --panel-border: rgb(255 255 255 / 0.07);
+  --panel-highlight: rgb(255 255 255 / 0.06);
+  --panel-shadow: 0 24px 60px rgb(0 0 0 / 0.45);
+
+  /* Fields and quiet buttons: indigo glass. */
+  --field-bg: linear-gradient(180deg, rgb(110 106 240 / 0.1), rgb(110 106 240 / 0.04));
+  --field-border: rgb(150 146 255 / 0.16);
+  --field-border-hover: rgb(150 146 255 / 0.3);
+
+  /* The card that marks the chosen row. */
+  --chosen-bg: linear-gradient(180deg, rgb(255 255 255 / 0.07), rgb(255 255 255 / 0.03));
+  --chosen-border: rgb(255 255 255 / 0.1);
+
+  --code-bg: #10101d;
+  --selection: #2e2b5c;
+  --scroll-thumb: #26263a;
+  --scroll-thumb-hover: #383852;
+
+  --star: rgb(255 255 255 / 0.5);
+}
+
+:root[data-theme='light'] {
+  --bg-app: #dfe3ec;
+  --bg-sidebar: #f7f7fb;
+  --bg-content: #ffffff;
+
+  --surface-1: #fafafd;
+  --surface-2: #f2f2f8;
+  --surface-3: #eaeaf3;
+  --surface-hover: #e5e5f0;
+
+  --border-subtle: #e7e7f0;
+  --border-default: #dcdce8;
+  --border-emphasis: #c5c5d6;
+
+  --text-primary: #12121a;
+  --text-secondary: #4d4d5e;
+  --text-tertiary: #7b7b8e;
+  --text-disabled: #a8a8b8;
+
+  --accent: #e5383b;
+  --accent-hover: #ff4d4f;
+  --accent-muted: #f6b9ba;
+  --accent-on: #ffffff;
+  --accent-text: #c42a2d;
+
+  --brand: #5552e6;
+  --brand-deep: #3b39a8;
+  --glow: rgb(98 92 230 / 0.1);
+
+  --positive: #1fae5f;
+
+  --primary-bg: #12121a;
+  --primary-bg-hover: #26263a;
+  --primary-text: #ffffff;
+
+  --panel-bg: linear-gradient(180deg, #f3f3fd 0%, #ffffff 30%, #ffffff 100%);
+  --panel-border: rgb(20 20 60 / 0.08);
+  --panel-highlight: rgb(255 255 255 / 0.9);
+  --panel-shadow: 0 18px 50px rgb(40 40 90 / 0.12);
+
+  --field-bg: linear-gradient(180deg, rgb(85 82 230 / 0.06), rgb(85 82 230 / 0.02));
+  --field-border: rgb(85 82 230 / 0.16);
+  --field-border-hover: rgb(85 82 230 / 0.3);
+
+  --chosen-bg: linear-gradient(180deg, rgb(85 82 230 / 0.08), rgb(85 82 230 / 0.04));
+  --chosen-border: rgb(85 82 230 / 0.18);
+
+  --code-bg: #f4f4f9;
+  --selection: #dcdbff;
+  --scroll-thumb: #cbcbd9;
+  --scroll-thumb-hover: #b0b0c2;
+
+  --star: rgb(60 60 120 / 0.25);
+}
+
+/* ---------------------------------------------------------------- panels */
+
+/*
+ * Every region of the window is a card on the frame. The sidebar used to be
+ * the frame itself; now it is a card like the workspace beside it.
+ */
+.sidebar,
+.workspace {
+  border: 1px solid var(--panel-border);
+  border-radius: var(--radius-xl);
+  box-shadow:
+    inset 0 1px 0 var(--panel-highlight),
+    var(--panel-shadow);
+}
+
+.sidebar {
+  gap: 0.875rem;
+  padding: 0.875rem 0.75rem 0.625rem;
+  background: radial-gradient(120% 28% at 20% 0%, var(--glow), transparent 70%), var(--bg-sidebar);
+}
+
+/*
+ * One rhythm between the blocks of the sidebar: the gap above, and no margin
+ * of their own. Each block used to bring its own, so the space between two of
+ * them depended on which two they were, and some had none at all.
+ */
+.sidebar > .spaces,
+.sidebar > .brand,
+.sidebar > .bookmarks,
+.sidebar > .search,
+.sidebar > .nav-notice,
+.sidebar > .tree-scroll {
+  margin-top: 0;
+  margin-bottom: 0;
+}
+
+.sidebar > .sidebar-foot {
+  padding-top: 0;
+}
+
+.spaces {
+  gap: 6px;
+}
+
+.nav-actions {
+  gap: 0.375rem;
+}
+
+/* The light behind the page: indigo, from above, faint enough to read over. */
+.workspace {
+  background: radial-gradient(70% 45% at 50% 0%, var(--glow), transparent 75%), var(--bg-content);
+}
+
+/* Sticky heads sit on the sidebar's own colour, below the glow. */
+.section-head {
+  background: var(--bg-sidebar);
+}
+
+/* --------------------------------------------------------------- brand */
+
+/* With the panel's inset the row is tighter, and the mark is what must not
+   give way. */
+.brand > svg {
+  flex: 0 0 auto;
+}
+
+.brand-name {
+  font-size: 0.9375rem;
+  font-weight: 600;
+  letter-spacing: -0.02em;
+}
+
+/* ------------------------------------------------- fields and buttons */
+
+/* Quiet buttons and fields share one material: indigo glass. */
+.nav-action,
+.search-input {
+  border-color: var(--field-border);
+  background: var(--field-bg);
+}
+
+.nav-action {
+  gap: 0.625rem;
+  height: 2.125rem;
+  padding: 0 0.75rem;
+  border-radius: var(--radius-md);
+  color: var(--text-secondary);
+}
+
+.nav-action:hover {
+  border-color: var(--field-border-hover);
+  background: var(--field-bg);
+  color: var(--text-primary);
+}
+
+.search-input {
+  height: 2.125rem;
+  border-radius: var(--radius-md);
+}
+
+.search-input:focus {
+  border-color: var(--field-border-hover);
+  background: var(--field-bg);
+}
+
+/* The one primary action on a screen: white, with dark text. */
+.empty-action,
+.dialog-button.is-primary {
+  border-color: transparent;
+  border-radius: var(--radius-md);
+  background: var(--primary-bg);
+  color: var(--primary-text);
+  font-weight: 550;
+  box-shadow: 0 6px 18px rgb(0 0 0 / 0.25);
+}
+
+.empty-action:hover,
+.dialog-button.is-primary:hover {
+  background: var(--primary-bg-hover);
+  color: var(--primary-text);
+}
+
+.empty-action.is-quiet,
+.dialog-button {
+  border: 1px solid var(--field-border);
+  border-radius: var(--radius-md);
+  background: var(--field-bg);
+  box-shadow: none;
+  color: var(--text-secondary);
+}
+
+.empty-action.is-quiet:hover,
+.dialog-button:hover {
+  border-color: var(--field-border-hover);
+  background: var(--field-bg);
+  color: var(--text-primary);
+}
+
+/* Switched on is green, and green means nothing else. */
+.switch[data-on='true'] {
+  background: var(--positive);
+}
+
+.switch::after {
+  top: 0.125rem;
+  left: 0.125rem;
+  width: 0.75rem;
+  height: 0.75rem;
+}
+
+.switch[data-on='true']::after {
+  background: #ffffff;
+  transform: translateX(0.75rem);
+}
+
+/* ------------------------------------------------------- labels and tree */
+
+.bookmark {
+  padding: 4px 0.5rem;
+}
+
+.section-label,
+.bookmarks-title {
+  color: var(--text-tertiary);
+  font-size: 0.625rem;
+  font-weight: 500;
+  letter-spacing: 0.08em;
+}
+
+/*
+ * Rows are dim until chosen; the chosen one is lifted onto a small card of its
+ * own, the way the reference marks the open project.
+ */
+.tree-row {
+  border: 1px solid transparent;
+  border-radius: var(--radius-sm);
+  color: var(--text-secondary);
+}
+
+.tree-row:hover {
+  background: var(--surface-2);
+}
+
+.tree-row.is-active {
+  border-color: var(--chosen-border);
+  background: var(--chosen-bg);
+  color: var(--text-primary);
+}
+
+.tree-icon.is-folder,
+.tree-row.is-active .tree-icon.is-folder {
+  color: var(--text-secondary);
+}
+
+.tree-row.is-active .tree-icon.is-folder {
+  color: var(--text-primary);
+}
+
+.tree.is-nested {
+  border-left-color: var(--border-default);
+}
+
+/* ---------------------------------------------------------------- spaces */
+
+/* The chosen space wears the accent as an outline, like a selected model. */
+.space {
+  height: 1.75rem;
+  border-color: var(--field-border);
+  background: var(--field-bg);
+}
+
+.space.is-active {
+  border-color: color-mix(in srgb, var(--accent) 70%, transparent);
+  background: color-mix(in srgb, var(--accent) 12%, transparent);
+  color: var(--accent-text);
+}
+
+/* The "Arquivos" space: each loose file is a row with room to breathe, and the
+   open one is lifted onto the same card as the chosen row of the tree. */
+.files-panel {
+  gap: 0.625rem;
+  padding: 0;
+}
+
+.files-note {
+  padding: 0 0.25rem;
+  line-height: 1.45;
+}
+
+.files-panel ul {
+  gap: 4px;
+}
+
+.files-panel li {
+  border: 1px solid transparent;
+  border-radius: var(--radius-md);
+}
+
+.files-panel li:hover {
+  background: var(--surface-2);
+}
+
+.files-panel li.is-active {
+  border-color: var(--chosen-border);
+  background: var(--chosen-bg);
+}
+
+.files-open {
+  gap: 0.625rem;
+  padding: 0.5rem 0.625rem;
+}
+
+/* The icon sits on the name's line, not between the two lines. */
+.files-open > svg {
+  flex: 0 0 auto;
+  margin-top: 2px;
+  color: var(--text-tertiary);
+}
+
+.files-open span {
+  gap: 2px;
+}
+
+.files-move {
+  margin-right: 0.25rem;
+  border-radius: var(--radius-sm);
+}
+
+/* ------------------------------------------------------------------ tabs */
+
+.workspace-top {
+  min-height: 2.5rem;
+  padding: 0 0.375rem;
+}
+
+.tab {
+  height: 2.5rem;
+  border-right: 0;
+  color: var(--text-tertiary);
+}
+
+.tab.is-active {
+  background: transparent;
+  color: var(--text-primary);
+}
+
+/* The chosen tab is underlined by a short white bar with round ends. */
+.tab.is-active::after {
+  right: 0.75rem;
+  bottom: 0;
+  left: 0.75rem;
+  height: 3px;
+  border-radius: 3px 3px 0 0;
+  background: var(--text-primary);
+}
+
+/* A dirty file is still coral, so it reads as something to see to. */
+.tab-dot {
+  background: var(--accent);
+}
+
+/* The info panel's switch reads like the reference's TOOLS / FILES. */
+.info-tab {
+  height: 2.5rem;
+  border-bottom: 0;
+  position: relative;
+  color: var(--text-tertiary);
+  font-size: 0.65625rem;
+  font-weight: 500;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+}
+
+.info-tab.is-active {
+  color: var(--text-primary);
+}
+
+.info-tab.is-active::after {
+  position: absolute;
+  right: 20%;
+  bottom: 0;
+  left: 20%;
+  height: 3px;
+  border-radius: 3px 3px 0 0;
+  background: var(--text-primary);
+  content: '';
+}
+
+/* ------------------------------------------------------------ chips */
+
+/*
+ * A state that asks for attention is a coral chip with a dashed outline: the
+ * unsaved mark in the top bar, the way the reference marks attached context.
+ */
+.save-state[data-state='dirty'] {
+  border: 1px dashed color-mix(in srgb, var(--accent) 65%, transparent);
+  background: color-mix(in srgb, var(--accent) 10%, transparent);
+}
+
+.save-state {
+  border: 1px solid var(--field-border);
+  background: var(--field-bg);
+}
+
+/* ----------------------------------------------------------- empty state */
+
+/*
+ * The empty workspace is the one place with room for the reference's night
+ * sky: a scatter of faint stars behind the card. Never behind text that is
+ * being read.
+ */
+.empty {
+  background-image:
+    radial-gradient(1px 1px at 12% 18%, var(--star), transparent),
+    radial-gradient(1px 1px at 27% 64%, var(--star), transparent),
+    radial-gradient(1px 1px at 41% 32%, var(--star), transparent),
+    radial-gradient(1.5px 1.5px at 58% 12%, var(--star), transparent),
+    radial-gradient(1px 1px at 66% 78%, var(--star), transparent),
+    radial-gradient(1px 1px at 79% 41%, var(--star), transparent),
+    radial-gradient(1.5px 1.5px at 88% 70%, var(--star), transparent),
+    radial-gradient(1px 1px at 93% 22%, var(--star), transparent),
+    radial-gradient(1px 1px at 7% 86%, var(--star), transparent),
+    radial-gradient(1px 1px at 35% 90%, var(--star), transparent);
+}
+
+.empty-card {
+  border: 1px solid var(--panel-border);
+  border-radius: var(--radius-xl);
+  background: var(--panel-bg);
+  box-shadow:
+    inset 0 1px 0 var(--panel-highlight),
+    var(--panel-shadow);
+  backdrop-filter: blur(6px);
+}
+
+.empty-title {
+  color: var(--text-primary);
+  font-size: 0.9375rem;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+}
+
+/* --------------------------------------------------------- floating cards */
+
+.dialog,
+.menu {
+  border-color: var(--panel-border);
+  border-radius: var(--radius-lg);
+  background: var(--panel-bg);
+  box-shadow:
+    inset 0 1px 0 var(--panel-highlight),
+    var(--panel-shadow);
+}
+
+/* The settings palette keeps its own background, which has an opacity of its
+   own; only the edge and the light change. */
+.settings {
+  border-color: var(--panel-border);
+  box-shadow:
+    inset 0 1px 0 var(--panel-highlight),
+    var(--panel-shadow);
+}
+
+/* ------------------------------------------------------------ status bar */
+
+.status {
+  border-top-color: var(--border-subtle);
+  color: var(--text-tertiary);
+}

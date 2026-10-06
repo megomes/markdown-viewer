@@ -12,17 +12,9 @@ interface Props {
   canMoveToVault: boolean
   onActivate: (id: string) => void
   onMoveToVault: (tab: Tab) => void
-  onOpenFile: () => void
 }
 
-export function FilesPanel({
-  tabs,
-  activeId,
-  canMoveToVault,
-  onActivate,
-  onMoveToVault,
-  onOpenFile,
-}: Props) {
+export function FilesPanel({ tabs, activeId, canMoveToVault, onActivate, onMoveToVault }: Props) {
   return (
     <div className="files-panel">
       <p className="files-note">Arquivos abertos de fora do vault. Não sincronizam.</p>
@@ -54,9 +46,6 @@ export function FilesPanel({
           </li>
         ))}
       </ul>
-      <button type="button" className="nav-action" onClick={onOpenFile}>
-        Abrir arquivo
-      </button>
     </div>
   )
 }

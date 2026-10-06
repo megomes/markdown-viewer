@@ -7,6 +7,7 @@ import { Dock } from '~/ui/Dock'
 import { Note } from '~/ui/Note'
 import { Peek } from '~/ui/Peek'
 import '~/ui/styles.css'
+import '~/ui/design-system.css'
 
 // The desktop window has no title bar of its own, so the interface has to leave
 // room for the system's window buttons and offer somewhere to drag from.
