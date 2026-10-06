@@ -133,8 +133,13 @@ export class FrontmatterWidget extends WidgetType {
   }
 
   toDOM(view: EditorView): HTMLElement {
+    // The block is the wrapper, whose padding is the space below the box: a
+    // margin there is not measured, and moved every click below it (note #5).
+    const block = document.createElement('div')
+    block.className = 'cm-md-frontmatter-block'
     const box = document.createElement('div')
     box.className = 'cm-md-frontmatter'
+    block.append(box)
 
     const properties = parseProperties(this.text)
     if (properties.length === 0) {
@@ -170,7 +175,7 @@ export class FrontmatterWidget extends WidgetType {
       view.focus()
     })
 
-    return box
+    return block
   }
 
   ignoreEvent(): boolean {

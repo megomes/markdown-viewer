@@ -37,6 +37,7 @@ import {
   toggleTask,
 } from '~/editor/commands'
 import { exportDocument } from '~/editor/export-html'
+import { requestTitleFocus } from '~/editor/title'
 import { exportPdf } from '~/editor/export-pdf'
 import { fileSystem, isDesktop, platform } from '~/platform'
 import { onOpenedPaths } from '~/platform/opened'
@@ -66,12 +67,21 @@ import { Cloud, CloudAlert, CloudOff, MessageSquareText, RefreshCw } from 'lucid
 import { SyncPanel } from './SyncPanel'
 import { SpaceStrip } from './SpaceStrip'
 import { FilesPanel } from './FilesPanel'
-import { setVault, spaceOfTab, spacesOf, useVault, type Space, type SpaceId } from '~/app/spaces'
+import {
+  getVault,
+  setVault,
+  spaceOfTab,
+  spacesOf,
+  useVault,
+  type Space,
+  type SpaceId,
+} from '~/app/spaces'
 import { startSync, useSync } from '~/app/sync'
 import { SidebarResizer } from './SidebarResizer'
 import { canPrint, printHtml } from './print'
 import { installWindowDrag } from './window-drag'
 import { StatusBar } from './StatusBar'
+import { TitleBar } from './TitleBar'
 import { Tabs } from './Tabs'
 import {
   AlertIcon,
@@ -301,7 +311,14 @@ export function App() {
       await actions.expandFolder(baseId, parent)
       const entry = await actions.createEntry(baseId, parent, kind)
       if (!entry) return
-      if (kind === 'file') void actions.openFile(entry, false)
+      if (kind === 'file') {
+        // A note is named in its own title, selected and ready to be typed
+        // over, as Obsidian does; the tree's box would lose the focus to the
+        // editor opening the note and close before anything was typed.
+        requestTitleFocus()
+        void actions.openFile(entry, false)
+        return
+      }
       setRenamingId(entry.id)
     },
     [actions],
@@ -827,13 +844,31 @@ export function App() {
     // to reopen, so they do not depend on any folder still being reachable.
     for (const draft of loadDrafts()) actions.newNote(draft)
 
+    // The vault opens with the app, whatever the last session had (note #2).
+    // A vault chosen in the sync panel was never part of a session, so after a
+    // restart its space had no tree at all: nothing to click, create or drag.
+    // The browser cannot reopen a folder without a click, so it waits for one.
+    const openVault = () => {
+      const vault = getVault()
+      if (!vault || !isDesktop()) return
+      void actions.openRecentBase({
+        id: vault,
+        name: vault.split(/[\\/]/).pop() || vault,
+        label: vault,
+        at: Date.now(),
+      })
+    }
+
     const session = loadSession()
-    if (!session) return
+    if (!session) {
+      openVault()
+      return
+    }
     previous.current = session
     views.current = Object.fromEntries(
       session.tabs.flatMap((tab) => (tab.view ? [[tab.id, tab.view]] : [])),
     )
-    void restore(session, false)
+    void restore(session, false).then(openVault)
     // `actions` is stable and asking for it here would re-run the restore.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [restore])
@@ -1293,16 +1328,19 @@ export function App() {
     latestRun.current = runCommand
   })
   const hasDocument = state.tabs.length > 0
+  const plan = useMemo(
+    () => menuPlan({ recents: state.recents, hasDocument, apple: onApple() }),
+    [state.recents, hasDocument],
+  )
+  // On Windows and Linux the menu lives in the app's own title bar (TitleBar).
+  const ownTitleBar = isDesktop() && !onApple()
   useEffect(() => {
-    if (!isDesktop()) return
-    void installAppMenu(
-      menuPlan({ recents: state.recents, hasDocument, apple: onApple() }),
-      (command) => latestRun.current(command),
-    )
+    if (!isDesktop() || !onApple()) return
+    void installAppMenu(plan, (command) => latestRun.current(command))
       // A menu that did not install leaves the app usable by keyboard, so it
       // is worth a line in the console and not an interruption.
       .catch((error: unknown) => console.error('menu do sistema:', error))
-  }, [state.recents, hasDocument])
+  }, [plan])
 
   /**
    * Brings a file from outside into the vault: a copy at the vault's root (with
@@ -1352,6 +1390,7 @@ export function App() {
           element carrying the attribute, never on a child of it, which is why
           the strip is empty and why the text below repeats the attribute. */}
       <div className="drag-strip" data-drag-window />
+      {ownTitleBar && <TitleBar plan={plan} run={(command) => latestRun.current(command)} />}
       <aside className="sidebar">
         <div className="brand" data-drag-window>
           <BrandMark />

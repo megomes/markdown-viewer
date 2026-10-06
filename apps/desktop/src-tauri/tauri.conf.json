@@ -22,6 +22,7 @@
         "titleBarStyle": "Overlay",
         "hiddenTitle": true,
         "visible": false,
+        "transparent": true,
         "dragDropEnabled": false
       }
     ],

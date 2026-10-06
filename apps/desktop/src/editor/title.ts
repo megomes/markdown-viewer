@@ -25,6 +25,21 @@ export const titleCompartment = new Compartment()
 /** The shortcuts that belong to the name while it is being typed into. */
 const FIELD_KEYS = new Set(['a', 'c', 'v', 'x', 'z', 'y', 'arrowleft', 'arrowright', 'backspace'])
 
+/**
+ * A note just created asks for its title: the next editable title drawn within a
+ * moment takes the focus with its name selected, so typing names the note, as in
+ * Obsidian. A flag and not a parameter, because the editor that draws the title is
+ * built later and elsewhere, once the new file has opened. It holds until the name
+ * is used (or the moment passes), because the editor may be built twice while the
+ * file loads, and the second one is the one that stays.
+ */
+let titleWanted = 0
+const TITLE_WAIT = 3000
+
+export function requestTitleFocus(): void {
+  titleWanted = Date.now()
+}
+
 /** How long a refused name's reason stays under the title. */
 const REFUSAL_TIME = 4000
 
@@ -101,6 +116,7 @@ class TitleWidget extends WidgetType {
     }
 
     const commit = async () => {
+      titleWanted = 0
       if (this.gone || busy) return
       const next = typed()
       if (next === this.stem) {
@@ -145,6 +161,7 @@ class TitleWidget extends WidgetType {
         void commit().then(toBody)
       } else if (event.key === 'Escape') {
         event.preventDefault()
+        titleWanted = 0
         name.textContent = this.stem
         toBody()
       }
@@ -157,6 +174,19 @@ class TitleWidget extends WidgetType {
     })
 
     name.addEventListener('blur', () => void commit())
+
+    if (titleWanted && Date.now() - titleWanted < TITLE_WAIT) {
+      // After the editor has placed itself, or its own focus would win.
+      window.setTimeout(() => {
+        if (this.gone || !name.isConnected) return
+        name.focus()
+        const range = document.createRange()
+        range.selectNodeContents(name)
+        const selection = window.getSelection()
+        selection?.removeAllRanges()
+        selection?.addRange(range)
+      }, 60)
+    }
 
     return title
   }

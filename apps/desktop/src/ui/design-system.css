@@ -628,3 +628,157 @@
   border-top-color: var(--border-subtle);
   color: var(--text-tertiary);
 }
+
+/* ------------------------------------------------------------- title bar */
+
+/*
+ * The window's own title bar on Windows and Linux (note #4), in the colour of
+ * the frame, as VS Code does it: the mark, the menu, a stretch to drag the
+ * window by, and the three window buttons, flush with the top right corner.
+ */
+:root[data-titlebar='custom'] {
+  --titlebar-height: 2.125rem;
+}
+
+:root[data-titlebar='custom'] .shell {
+  padding-top: var(--titlebar-height);
+}
+
+:root[data-titlebar='custom'] .drag-strip {
+  display: none;
+}
+
+/*
+ * The window's own corners, concentric with the panels inside: their radius
+ * plus the gap between them and the edge, so both curves run parallel. The
+ * window is transparent and without the system's shadow (lib.rs), so this edge
+ * is the only one there is: the frame is clipped to it, and a hairline draws it.
+ * `contain: paint` makes the clip hold for the fixed title bar and menus too.
+ */
+:root[data-titlebar='custom'],
+:root[data-titlebar='custom'] body {
+  background: transparent;
+}
+
+:root[data-titlebar='custom'] #root {
+  position: relative;
+  overflow: hidden;
+  border-radius: calc(var(--radius-xl) + 0.625rem);
+  background: var(--bg-app);
+  contain: paint;
+}
+
+:root[data-titlebar='custom'] #root::after {
+  position: absolute;
+  inset: 0;
+  z-index: 100;
+  border: 1px solid var(--panel-border);
+  border-radius: inherit;
+  content: '';
+  pointer-events: none;
+}
+
+:root[data-titlebar='custom'][data-maximized='true'] #root {
+  border-radius: 0;
+}
+
+:root[data-titlebar='custom'][data-maximized='true'] #root::after {
+  display: none;
+}
+
+.titlebar {
+  position: fixed;
+  top: 0;
+  right: 0;
+  left: 0;
+  z-index: 45;
+  display: flex;
+  align-items: stretch;
+  height: var(--titlebar-height);
+  background: var(--bg-app);
+  user-select: none;
+}
+
+.titlebar-mark {
+  display: flex;
+  align-items: center;
+  padding: 0 0.5rem 0 0.75rem;
+}
+
+.titlebar-menus {
+  display: flex;
+  align-items: center;
+  gap: 1px;
+}
+
+.titlebar-menu {
+  height: 1.625rem;
+  padding: 0 0.5rem;
+  border: 0;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--text-secondary);
+  font: inherit;
+  font-size: 0.78125rem;
+  cursor: default;
+}
+
+.titlebar-menu:hover,
+.titlebar-menu.is-open {
+  background: var(--surface-hover);
+  color: var(--text-primary);
+}
+
+.titlebar-fill {
+  flex: 1;
+}
+
+.titlebar-controls {
+  display: flex;
+}
+
+.titlebar-control {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 2.875rem;
+  border: 0;
+  background: transparent;
+  color: var(--text-secondary);
+  cursor: default;
+}
+
+.titlebar-control svg {
+  width: 10px;
+  height: 10px;
+  fill: none;
+  stroke: currentcolor;
+  stroke-width: 1;
+}
+
+.titlebar-control:hover {
+  background: var(--surface-hover);
+  color: var(--text-primary);
+}
+
+/* Windows' own red for close, the one place it means "this ends something". */
+.titlebar-control.is-close:hover {
+  background: #c42b1c;
+  color: #ffffff;
+}
+
+.titlebar-panel {
+  z-index: 60;
+  min-width: 15rem;
+}
+
+.menu-item.is-open {
+  background: var(--surface-hover);
+  color: var(--text-primary);
+}
+
+.menu-rule {
+  height: 1px;
+  margin: 0.25rem 0.375rem;
+  background: var(--border-subtle);
+}

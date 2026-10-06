@@ -230,6 +230,17 @@ pub fn run() {
             // first paint. If that never happens, it shows after three seconds:
             // a window that stays hidden is worse than a white flash.
             if let Some(window) = app.get_webview_window("main") {
+                // On Windows and Linux the app draws its own title bar, in its own
+                // colours and with the menu in it (TitleBar.tsx). On a Mac the
+                // system's transparent bar from tauri.conf.json stays.
+                #[cfg(not(target_os = "macos"))]
+                let _ = window.set_decorations(false);
+                // Windows 11 rounds a frameless window with a small radius of its
+                // own, which did not match the panels inside (16px). With no
+                // system shadow the window is a transparent rectangle, and the
+                // interface draws the rounded edge itself (design-system.css).
+                #[cfg(target_os = "windows")]
+                let _ = window.set_shadow(false);
                 std::thread::spawn(move || {
                     std::thread::sleep(std::time::Duration::from_secs(3));
                     if !window.is_visible().unwrap_or(true) {

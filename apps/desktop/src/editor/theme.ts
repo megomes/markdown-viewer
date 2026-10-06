@@ -32,7 +32,13 @@ export const editorTheme = EditorView.theme({
     margin: '0 auto',
     caretColor: 'var(--accent)',
   },
-  '.cm-line': { padding: '0 20px' },
+  // No line and no block may carry a vertical margin (note #5): CodeMirror maps
+  // a click to a line by the heights it measures, and a margin is not part of
+  // any height, so every margin above the click moved it down by that much. The
+  // spaces are padding, or a background drawn short of the line's edge.
+  // `flow-root` keeps what is inside a line (an embedded note, a card) from
+  // pushing its own margins out past the line.
+  '.cm-line': { padding: '0 20px', display: 'flow-root' },
   '&.cm-focused': { outline: 'none' },
   '&.cm-focused, &': { boxShadow: 'none' },
   '.cm-cursor, .cm-dropCursor': {
@@ -81,7 +87,8 @@ export const editorTheme = EditorView.theme({
 
   // The file name, at the top of the page and in the shape of a title.
   '.cm-md-title': {
-    margin: '0 20px 1em',
+    margin: '0 20px',
+    paddingBottom: '1em',
     color: 'var(--text-primary)',
     fontFamily: 'var(--font-heading)',
     fontSize: '1.74em',
@@ -171,15 +178,29 @@ export const editorTheme = EditorView.theme({
     fontSize: '0.84em',
     lineHeight: '1.65',
   },
-  '.cm-md-code.is-first': {
-    marginTop: '0.5em',
-    paddingTop: '0.5em',
+  // The ends carry the space around the block inside themselves, and draw the
+  // background short of it, behind the text (see `.cm-line` above).
+  '.cm-md-code.is-first, .cm-md-code.is-last': {
+    position: 'relative',
+    isolation: 'isolate',
+    background: 'none',
+  },
+  '.cm-md-code.is-first::before, .cm-md-code.is-last::before': {
+    position: 'absolute',
+    inset: '0',
+    zIndex: '-1',
+    background: 'var(--code-bg)',
+    content: "''",
+  },
+  '.cm-md-code.is-first': { paddingTop: '1em' },
+  '.cm-md-code.is-first::before': {
+    top: '0.5em',
     borderTopLeftRadius: 'var(--radius-md)',
     borderTopRightRadius: 'var(--radius-md)',
   },
-  '.cm-md-code.is-last': {
-    marginBottom: '0.9em',
-    paddingBottom: '0.6em',
+  '.cm-md-code.is-last': { paddingBottom: '1.5em' },
+  '.cm-md-code.is-last::before': {
+    bottom: '0.9em',
     borderBottomLeftRadius: 'var(--radius-md)',
     borderBottomRightRadius: 'var(--radius-md)',
   },
@@ -199,8 +220,10 @@ export const editorTheme = EditorView.theme({
 
   // The file name, front matter and everything else sit inside the same column,
   // so blocks use the same 20px side inset as the text lines.
+  // The space under the properties is the wrapper's padding (frontmatter.ts).
+  '.cm-md-frontmatter-block': { paddingBottom: '1.6em' },
   '.cm-md-frontmatter': {
-    margin: '0 20px 1.6em',
+    margin: '0 20px',
     padding: '12px 14px',
     border: '1px solid var(--border-subtle)',
     borderRadius: 'var(--radius-lg)',
@@ -242,16 +265,31 @@ export const editorTheme = EditorView.theme({
     color: 'var(--text-secondary)',
     fontStyle: 'normal',
   },
+  // As with code: the space around the box is inside the end lines, and the
+  // box (background and coloured edge) is drawn short of it.
+  '.cm-md-callout.is-first, .cm-md-callout.is-last': {
+    position: 'relative',
+    isolation: 'isolate',
+    background: 'none',
+    borderLeftColor: 'transparent',
+  },
+  '.cm-md-callout.is-first::before, .cm-md-callout.is-last::before': {
+    position: 'absolute',
+    inset: '0 0 0 -2px',
+    zIndex: '-1',
+    borderLeft: '2px solid var(--callout-color)',
+    background: 'color-mix(in srgb, var(--callout-color) 8%, transparent)',
+    content: "''",
+  },
   '.cm-md-callout.is-first': {
-    marginTop: '0.8em',
-    paddingTop: '0.5em',
-    borderTopRightRadius: 'var(--radius-md)',
+    paddingTop: '1.3em',
     color: 'var(--callout-color)',
     fontWeight: '600',
   },
-  '.cm-md-callout.is-last': {
-    marginBottom: '0.9em',
-    paddingBottom: '0.6em',
+  '.cm-md-callout.is-first::before': { top: '0.8em', borderTopRightRadius: 'var(--radius-md)' },
+  '.cm-md-callout.is-last': { paddingBottom: '1.5em' },
+  '.cm-md-callout.is-last::before': {
+    bottom: '0.9em',
     borderBottomRightRadius: 'var(--radius-md)',
   },
   '.cm-md-callout-icon': {
@@ -352,8 +390,11 @@ export const editorTheme = EditorView.theme({
     display: 'flex',
     justifyContent: 'center',
     padding: '12px',
-    margin: '4px 0',
-    borderRadius: 'var(--radius-md)',
+    // The 4px above and below as clear borders, which count in the height.
+    borderTop: '4px solid transparent',
+    borderBottom: '4px solid transparent',
+    backgroundClip: 'padding-box',
+    borderRadius: 'calc(var(--radius-md) + 4px) / var(--radius-md)',
     background: 'var(--surface-1)',
     color: 'var(--text-tertiary)',
     fontSize: '0.85em',
@@ -405,13 +446,13 @@ export const editorTheme = EditorView.theme({
     color: 'var(--text-tertiary)',
     fontSize: '0.92em',
   },
-  '.cm-md-footnote-def.is-first': { marginTop: '0.5em' },
+  '.cm-md-footnote-def.is-first': { paddingTop: '0.5em' },
 
   // Tables, drawn as a grid and edited inside it.
   '.cm-md-table-wrap': {
     position: 'relative',
-    margin: '0.2em 20px 1.4em',
-    paddingTop: '9px',
+    margin: '0 20px',
+    padding: 'calc(9px + 0.2em) 0 1.4em',
     overflowX: 'auto',
     fontFamily: 'var(--font-ui)',
   },
