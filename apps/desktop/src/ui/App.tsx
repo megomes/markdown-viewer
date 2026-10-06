@@ -87,6 +87,7 @@ import {
   SearchIcon,
   SettingsIcon,
   SidebarIcon,
+  SortIcon,
   ThemeIcon,
   UnpinIcon,
 } from './icons'
@@ -170,6 +171,12 @@ export function App() {
   const [searchOpen, setSearchOpen] = useState(false)
   const [measuring, setMeasuring] = useState(false)
   const [menu, setMenu] = useState<{ items: MenuItem[]; x: number; y: number } | null>(null)
+  const [question, setQuestion] = useState<{
+    title: string
+    body?: string
+    choices: DialogChoice[]
+  } | null>(null)
+
   const restore = actions.restoreSession
   const [renamingId, setRenamingId] = useState<string | null>(null)
   const [busy, setBusy] = useState<string | null>(null)
@@ -190,7 +197,53 @@ export function App() {
   const togglePinRef = useRef<(target: PinTarget) => void>(() => {})
   const unpinRef = useRef<(id: string) => void>(() => {})
 
-  // Only the four slices the tree reads, so that typing in a document does not
+  /**
+   * When each file in the tree last changed, read only while the tree is ordered
+   * by it. The disk is asked when the folders' contents change; a file saved from
+   * here brings its own new time, so the note just written moves to the top at once.
+   */
+  const byModified = settings.treeSort === 'modified-desc' || settings.treeSort === 'modified-asc'
+  const [statted, setStatted] = useState<Record<string, number>>({})
+  useEffect(() => {
+    if (!byModified) return
+    let cancelled = false
+    const files = Object.values(state.children)
+      .flat()
+      .filter((entry) => entry.kind === 'file')
+    void Promise.all(
+      files.map(async (entry) => {
+        const version = await fileSystem()
+          .stat(entry.baseId, entry.path)
+          .catch(() => null)
+        return [entry.id, version?.modifiedAt ?? 0] as const
+      }),
+    ).then((pairs) => {
+      if (!cancelled) setStatted(Object.fromEntries(pairs))
+    })
+    return () => {
+      cancelled = true
+    }
+  }, [byModified, state.children])
+  // A string, so that typing (which changes the docs but not their saved time)
+  // does not rebuild the tree.
+  const savedTimes = byModified
+    ? JSON.stringify(
+        state.tabs.flatMap((tab) => {
+          const doc = state.docs[tab.id]
+          return doc && tab.path ? [[entryId(tab.baseId, tab.path), doc.version.modifiedAt]] : []
+        }),
+      )
+    : '[]'
+  const modified = useMemo(() => {
+    if (!byModified) return undefined
+    const times = { ...statted }
+    for (const [id, at] of JSON.parse(savedTimes) as [string, number][]) {
+      times[id] = Math.max(times[id] ?? 0, at)
+    }
+    return times
+  }, [byModified, statted, savedTimes])
+
+  // Only the slices the tree reads, so that typing in a document does not
   // invalidate it.
   const treeData: TreeData = useMemo(
     () => ({
@@ -199,8 +252,18 @@ export function App() {
       activeId: state.activeId,
       filter: state.filter,
       icons: folderIcons,
+      sort: settings.treeSort,
+      modified,
     }),
-    [state.children, state.expanded, state.activeId, state.filter, folderIcons],
+    [
+      state.children,
+      state.expanded,
+      state.activeId,
+      state.filter,
+      folderIcons,
+      settings.treeSort,
+      modified,
+    ],
   )
 
   // Folder icons from Iconize, read once per set of open folders.
@@ -244,70 +307,126 @@ export function App() {
     [actions],
   )
 
+  /**
+   * Deleting asks first, as Obsidian does: the file goes to the system trash, but
+   * a stray click on the last item of a menu should not be what sends it there.
+   */
+  const confirmTrash = useCallback(
+    (entry: Entry) => {
+      const folder = entry.kind === 'directory'
+      setQuestion({
+        title: folder ? 'Excluir pasta' : 'Excluir arquivo',
+        body:
+          `Tem certeza de que quer excluir “${entry.name}”` +
+          (folder ? ' e tudo o que está dentro dela' : '') +
+          '? Vai para a lixeira do sistema.',
+        choices: [
+          { label: 'Cancelar', onSelect: () => setQuestion(null) },
+          {
+            label: 'Excluir',
+            primary: true,
+            destructive: true,
+            onSelect: () => {
+              setQuestion(null)
+              void actions.trashEntry(entry)
+            },
+          },
+        ],
+      })
+    },
+    [actions],
+  )
+
+  /**
+   * The tree's menu, in the order and with the names of Obsidian's file explorer,
+   * less what this app does not have yet (open to the right, in a new window, move
+   * to, bookmark).
+   */
   const menuItems = useCallback(
     (entry: Entry): MenuItem[] => {
       const files = fileSystem()
-      const parent = entry.kind === 'directory' ? entry.path : parentPath(entry.path)
       const copy = (text: string) => void navigator.clipboard.writeText(text)
+      const folder = entry.kind === 'directory'
+      const system = onApple() ? 'Mostrar no Finder' : 'Mostrar no Explorador de Arquivos'
+
+      const create: MenuItem[] = folder
+        ? [
+            { label: 'Nova nota', onSelect: () => void createIn(entry.baseId, entry.path, 'file') },
+            {
+              label: 'Nova pasta',
+              onSelect: () => void createIn(entry.baseId, entry.path, 'folder'),
+            },
+          ]
+        : [
+            { label: 'Abrir em nova aba', onSelect: () => void actions.openFile(entry, false) },
+            {
+              label: 'Fazer uma cópia',
+              separated: true,
+              onSelect: () => void actions.duplicateEntry(entry),
+            },
+            {
+              label: isPinned(latestPins.current, entry.id)
+                ? 'Desafixar da barra de notas'
+                : 'Fixar na barra de notas',
+              onSelect: () =>
+                togglePinRef.current({
+                  id: entry.id,
+                  baseId: entry.baseId,
+                  path: entry.path,
+                  name: entry.name,
+                }),
+            },
+          ]
 
       return [
-        { label: 'Novo arquivo', onSelect: () => void createIn(entry.baseId, parent, 'file') },
-        { label: 'Nova pasta', onSelect: () => void createIn(entry.baseId, parent, 'folder') },
+        ...create,
         {
-          label: 'Renomear',
+          label: 'Renomear…',
           hint: 'F2',
-          separated: true,
+          separated: folder,
           onSelect: () => setRenamingId(entry.id),
         },
         {
-          label: 'Duplicar',
-          disabled: entry.kind === 'directory',
-          onSelect: () => void actions.duplicateEntry(entry),
-        },
-        ...(entry.kind === 'file'
-          ? [
-              {
-                label: isPinned(latestPins.current, entry.id)
-                  ? 'Desafixar da barra de notas'
-                  : 'Fixar na barra de notas',
-                separated: true,
-                onSelect: () =>
-                  togglePinRef.current({
-                    id: entry.id,
-                    baseId: entry.baseId,
-                    path: entry.path,
-                    name: entry.name,
-                  }),
-              },
-            ]
-          : []),
-        {
-          label: 'Copiar caminho',
+          label: 'Copiar caminho relativo',
           separated: true,
+          onSelect: () => copy(entry.path),
+        },
+        {
+          label: 'Copiar caminho completo',
           disabled: !files.can.absolutePath,
           onSelect: () => copy(files.absolutePath(entry.baseId, entry.path) ?? entry.path),
         },
-        { label: 'Copiar caminho relativo', onSelect: () => copy(entry.path) },
         ...(files.can.reveal
-          ? [
-              {
-                label: 'Revelar no Finder',
-                onSelect: () => void actions.revealEntry(entry),
-              },
-            ]
+          ? [{ label: system, onSelect: () => void actions.revealEntry(entry) }]
           : []),
         {
-          label: 'Mover para a lixeira',
-          hint: '⌘⌫',
+          label: 'Excluir',
+          hint: onApple() ? '⌘⌫' : 'Ctrl+Del',
           separated: true,
           destructive: true,
           disabled: !files.can.trash,
-          onSelect: () => void actions.trashEntry(entry),
+          onSelect: () => confirmTrash(entry),
         },
       ]
     },
-    [actions, createIn],
+    [actions, createIn, confirmTrash],
   )
+
+  /** The orders of Obsidian's "Change sort order", the chosen one ticked. */
+  const sortMenu = (): MenuItem[] =>
+    (
+      [
+        ['name-asc', 'Nome do arquivo (A a Z)'],
+        ['name-desc', 'Nome do arquivo (Z a A)'],
+        ['modified-desc', 'Data de modificação (mais recente primeiro)'],
+        ['modified-asc', 'Data de modificação (mais antiga primeiro)'],
+      ] as const
+    ).map(([sort, label], i) => ({
+      label,
+      hint: settings.treeSort === sort ? '✓' : undefined,
+      separated: i === 2,
+      onSelect: () => update('treeSort', sort),
+    }))
 
   const tree: TreeHandlers = useMemo(
     () => ({
@@ -321,9 +440,9 @@ export function App() {
         void actions.renameEntry(entry, name)
       },
       onCancelRename: () => setRenamingId(null),
-      onTrash: (entry) => void actions.trashEntry(entry),
+      onTrash: confirmTrash,
     }),
-    [actions, menuItems, openFile, toggleFolder],
+    [actions, confirmTrash, menuItems, openFile, toggleFolder],
   )
 
   /**
@@ -886,12 +1005,6 @@ export function App() {
    * there is, and closing the tab throws it away.
    */
   const closed = useRef<Tab[]>([])
-  const [question, setQuestion] = useState<{
-    title: string
-    body?: string
-    choices: DialogChoice[]
-  } | null>(null)
-
   const closeTab = useCallback(
     (id: string) => {
       const tab = latestState.current.tabs.find((candidate: Tab) => candidate.id === id)
@@ -1253,92 +1366,41 @@ export function App() {
           onClose={(closing) => {
             if (closing.baseId && actions.closeBase(closing.baseId)) switchSpace('vault')
           }}
+          onAdd={(box) =>
+            setMenu({
+              x: box.left,
+              y: box.bottom + 4,
+              items: [
+                { label: 'Abrir pasta…', onSelect: () => void actions.openBase() },
+                { label: 'Abrir arquivo…', onSelect: () => void actions.openLooseFile() },
+              ],
+            })
+          }
         />
-        <div className="sidebar-tools">
-          <button
-            type="button"
-            className="icon-button"
-            aria-label="Ajustes"
-            title="Ajustes (⌘,)"
-            onClick={() => setSettingsOpen((open) => !open)}
-          >
-            <SettingsIcon size={16} />
-          </button>
-          <button
-            type="button"
-            className={'icon-button' + (feedbackOpen ? ' is-on' : '')}
-            aria-label="Feedback do app"
-            title={
-              'Feedback do app (' + keyCap(SHORTCUTS.find((one) => one.id === 'feedback')!) + ')'
-            }
-            aria-pressed={feedbackOpen}
-            onClick={() => setFeedbackOpen((open) => !open)}
-          >
-            <MessageSquareText size={16} strokeWidth={1.75} />
-          </button>
-          <button
-            type="button"
-            className={'icon-button sync-indicator is-' + sync.status + (syncOpen ? ' is-on' : '')}
-            aria-label="Sincronização"
-            title={
-              sync.status === 'off'
-                ? 'Sincronização desligada'
-                : sync.status === 'error'
-                  ? 'Sincronização parou: ' + (sync.message ?? '')
-                  : sync.status === 'syncing'
-                    ? 'Sincronizando…'
-                    : 'Sincronizado'
-            }
-            onClick={() => setSyncOpen((open) => !open)}
-          >
-            {sync.status === 'syncing' ? (
-              <RefreshCw size={16} strokeWidth={1.75} />
-            ) : sync.status === 'error' ? (
-              <CloudAlert size={16} strokeWidth={1.75} />
-            ) : sync.status === 'off' || sync.status === 'offline' ? (
-              <CloudOff size={16} strokeWidth={1.75} />
-            ) : (
-              <Cloud size={16} strokeWidth={1.75} />
-            )}
-          </button>
-          <button
-            type="button"
-            className="icon-button"
-            aria-label={dark ? 'Usar o tema claro' : 'Usar o tema escuro'}
-            title={dark ? 'Usar o tema claro' : 'Usar o tema escuro'}
-            onClick={(event) =>
-              changeTheme(centreOf(event.currentTarget), () =>
-                update('themeMode', dark ? 'light' : 'dark'),
-              )
-            }
-          >
-            <ThemeIcon size={16} />
-          </button>
-          <button
-            type="button"
-            className="icon-button"
-            aria-label="Esconder a barra lateral"
-            title="Esconder a barra lateral"
-            onClick={() => setSidebarOpen(false)}
-          >
-            <SidebarIcon />
-          </button>
-        </div>
 
-        <div className="nav-actions">
-          <button type="button" className="nav-action" onClick={() => void newNote()}>
-            <FilePlusIcon />
-            Nova nota
-          </button>
-          <button type="button" className="nav-action" onClick={() => void actions.openBase()}>
-            <FolderPlusIcon />
-            Abrir pasta
-          </button>
-          <button type="button" className="nav-action" onClick={() => void actions.openLooseFile()}>
-            <FileIcon />
-            Abrir arquivo
-          </button>
-        </div>
+        {/* Inside a folder the work is the tree, as in Obsidian; opening another
+            folder or a loose file is the "+" of the spaces. These are for
+            "Arquivos", where there is no tree. */}
+        {space.kind === 'files' && (
+          <div className="nav-actions">
+            <button type="button" className="nav-action" onClick={() => void newNote()}>
+              <FilePlusIcon />
+              Nova nota
+            </button>
+            <button type="button" className="nav-action" onClick={() => void actions.openBase()}>
+              <FolderPlusIcon />
+              Abrir pasta
+            </button>
+            <button
+              type="button"
+              className="nav-action"
+              onClick={() => void actions.openLooseFile()}
+            >
+              <FileIcon />
+              Abrir arquivo
+            </button>
+          </div>
+        )}
 
         {bookmarks.length > 0 && (
           <div className="bookmarks">
@@ -1434,48 +1496,57 @@ export function App() {
                   if (canDrop(moving, base.id, '')) void actions.moveEntry(moving, '')
                 }}
               >
-                <div className="section-head">
-                  <h2 className="section-label" title={base.label}>
-                    {base.name}
-                  </h2>
-                  <div className="section-actions">
-                    <button
-                      type="button"
-                      className="icon-button is-small"
-                      aria-label="Novo arquivo"
-                      title="Novo arquivo"
-                      onClick={() => void createIn(base.id, '', 'file')}
-                    >
-                      <FilePlusIcon size={17} />
-                    </button>
-                    <button
-                      type="button"
-                      className="icon-button is-small"
-                      aria-label="Nova pasta"
-                      title="Nova pasta"
-                      onClick={() => void createIn(base.id, '', 'folder')}
-                    >
-                      <FolderPlusIcon size={17} />
-                    </button>
-                    <button
-                      type="button"
-                      className="icon-button is-small"
-                      aria-label="Revelar o arquivo aberto"
-                      title="Revelar o arquivo aberto"
-                      onClick={() => void revealActive()}
-                    >
-                      <CrosshairIcon size={17} />
-                    </button>
-                    <button
-                      type="button"
-                      className="icon-button is-small"
-                      aria-label="Recolher tudo"
-                      title="Recolher tudo"
-                      onClick={actions.collapseAll}
-                    >
-                      <CollapseIcon size={17} />
-                    </button>
-                  </div>
+                {/* The bar of Obsidian's file explorer: new note, new folder, the
+                    order, reveal the open file, collapse everything. */}
+                <div className="tree-toolbar" role="toolbar" aria-label={base.name}>
+                  <button
+                    type="button"
+                    className="icon-button is-small"
+                    aria-label="Nova nota"
+                    title="Nova nota"
+                    onClick={() => void newNote()}
+                  >
+                    <FilePlusIcon size={17} />
+                  </button>
+                  <button
+                    type="button"
+                    className="icon-button is-small"
+                    aria-label="Nova pasta"
+                    title="Nova pasta"
+                    onClick={() => void createIn(base.id, '', 'folder')}
+                  >
+                    <FolderPlusIcon size={17} />
+                  </button>
+                  <button
+                    type="button"
+                    className="icon-button is-small"
+                    aria-label="Mudar a ordem"
+                    title="Mudar a ordem"
+                    onClick={(event) => {
+                      const box = event.currentTarget.getBoundingClientRect()
+                      setMenu({ items: sortMenu(), x: box.left, y: box.bottom + 4 })
+                    }}
+                  >
+                    <SortIcon size={17} />
+                  </button>
+                  <button
+                    type="button"
+                    className="icon-button is-small"
+                    aria-label="Revelar o arquivo aberto"
+                    title="Revelar o arquivo aberto"
+                    onClick={() => void revealActive()}
+                  >
+                    <CrosshairIcon size={17} />
+                  </button>
+                  <button
+                    type="button"
+                    className="icon-button is-small"
+                    aria-label="Recolher tudo"
+                    title="Recolher tudo"
+                    onClick={actions.collapseAll}
+                  >
+                    <CollapseIcon size={17} />
+                  </button>
                 </div>
                 <FileTree
                   data={treeData}
@@ -1502,6 +1573,78 @@ export function App() {
             onForgetBase={(base) => actions.forgetRecentBase(base.id)}
             onClear={actions.forgetRecents}
           />
+          <div className="sidebar-tools">
+            <button
+              type="button"
+              className="icon-button"
+              aria-label="Ajustes"
+              title="Ajustes (⌘,)"
+              onClick={() => setSettingsOpen((open) => !open)}
+            >
+              <SettingsIcon size={16} />
+            </button>
+            <button
+              type="button"
+              className={'icon-button' + (feedbackOpen ? ' is-on' : '')}
+              aria-label="Feedback do app"
+              title={
+                'Feedback do app (' + keyCap(SHORTCUTS.find((one) => one.id === 'feedback')!) + ')'
+              }
+              aria-pressed={feedbackOpen}
+              onClick={() => setFeedbackOpen((open) => !open)}
+            >
+              <MessageSquareText size={16} strokeWidth={1.75} />
+            </button>
+            <button
+              type="button"
+              className={
+                'icon-button sync-indicator is-' + sync.status + (syncOpen ? ' is-on' : '')
+              }
+              aria-label="Sincronização"
+              title={
+                sync.status === 'off'
+                  ? 'Sincronização desligada'
+                  : sync.status === 'error'
+                    ? 'Sincronização parou: ' + (sync.message ?? '')
+                    : sync.status === 'syncing'
+                      ? 'Sincronizando…'
+                      : 'Sincronizado'
+              }
+              onClick={() => setSyncOpen((open) => !open)}
+            >
+              {sync.status === 'syncing' ? (
+                <RefreshCw size={16} strokeWidth={1.75} />
+              ) : sync.status === 'error' ? (
+                <CloudAlert size={16} strokeWidth={1.75} />
+              ) : sync.status === 'off' || sync.status === 'offline' ? (
+                <CloudOff size={16} strokeWidth={1.75} />
+              ) : (
+                <Cloud size={16} strokeWidth={1.75} />
+              )}
+            </button>
+            <button
+              type="button"
+              className="icon-button"
+              aria-label={dark ? 'Usar o tema claro' : 'Usar o tema escuro'}
+              title={dark ? 'Usar o tema claro' : 'Usar o tema escuro'}
+              onClick={(event) =>
+                changeTheme(centreOf(event.currentTarget), () =>
+                  update('themeMode', dark ? 'light' : 'dark'),
+                )
+              }
+            >
+              <ThemeIcon size={16} />
+            </button>
+            <button
+              type="button"
+              className="icon-button"
+              aria-label="Esconder a barra lateral"
+              title="Esconder a barra lateral"
+              onClick={() => setSidebarOpen(false)}
+            >
+              <SidebarIcon />
+            </button>
+          </div>
         </div>
       </aside>
 

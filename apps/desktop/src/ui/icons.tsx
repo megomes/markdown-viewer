@@ -166,6 +166,13 @@ export const CollapseIcon = (p: IconProps) => (
   </Icon>
 )
 
+/** Two arrows, one up and one down: the order of a list. */
+export const SortIcon = (p: IconProps) => (
+  <Icon {...p}>
+    <path d="m3 8 4-4 4 4M7 4v16M21 16l-4 4-4-4M17 20V4" />
+  </Icon>
+)
+
 export const CrosshairIcon = (p: IconProps) => (
   <Icon {...p}>
     <circle cx="12" cy="12" r="3" />

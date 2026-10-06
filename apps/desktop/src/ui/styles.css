@@ -229,7 +229,11 @@ a:focus-visible,
      whole page scrolls instead of the editor. */
   /* The middle track is the drag handle, so the gap between the panes is the
      thing you grab. */
-  grid-template-columns: var(--sidebar-width, 13.5rem) 0.625rem minmax(0, 1fr);
+  /* Never narrower than the spaces strip needs to sit on one line (note #1);
+     SpaceStrip measures it into --sidebar-min. */
+  grid-template-columns:
+    max(var(--sidebar-width, 13.5rem), var(--sidebar-min, 0px))
+    0.625rem minmax(0, 1fr);
   grid-template-rows: minmax(0, 1fr);
   height: 100%;
   padding: 0.625rem;

@@ -12,6 +12,8 @@ import type { Side } from './dock-layout'
 
 export type BodyFont = 'sans' | 'serif' | 'mono'
 export type ThemeMode = 'system' | 'light' | 'dark'
+/** The orders Obsidian's file explorer offers, less the one by creation time. */
+export type TreeSort = 'name-asc' | 'name-desc' | 'modified-desc' | 'modified-asc'
 
 export interface Settings {
   /** Width of the reading column, in px. */
@@ -32,6 +34,8 @@ export interface Settings {
   recentsOpen: boolean
   /** Whether the tree shows the files this editor cannot open. */
   showAllFiles: boolean
+  /** How the tree orders the files of a folder; folders always come first. */
+  treeSort: TreeSort
   themeMode: ThemeMode
   readOnly: boolean
   /** Whether a pause in the typing writes the file by itself. */
@@ -61,6 +65,7 @@ export const DEFAULTS: Settings = {
   infoPanel: false,
   recentsOpen: false,
   showAllFiles: false,
+  treeSort: 'name-asc',
   themeMode: 'system',
   readOnly: false,
   // Off: the file is written when the person asks, with Mod-S. Writing behind

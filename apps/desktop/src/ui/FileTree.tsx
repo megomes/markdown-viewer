@@ -1,5 +1,6 @@
 import { memo, useEffect, useRef } from 'react'
 import { isPlainText, isTextFile, viewerOf, type Entry } from '@markdown-viewer/core/fs'
+import type { TreeSort } from '~/app/settings'
 import { ChevronIcon, FileIcon, FolderIcon, MarkdownIcon } from './icons'
 import { NamedIcon } from './NamedIcon'
 
@@ -16,6 +17,37 @@ export interface TreeData {
   filter: string
   /** Entry id to an Iconize icon name, for folders that have one. */
   icons?: Record<string, string>
+  sort?: TreeSort
+  /** Entry id to when the file last changed, for the orders by modification. */
+  modified?: Record<string, number>
+}
+
+const byName = (a: Entry, b: Entry) =>
+  a.name.localeCompare(b.name, undefined, { numeric: true, sensitivity: 'base' })
+
+/**
+ * Folders first, then files, as in Obsidian. A to Z and Z to A turn both groups
+ * around; the orders by time apply to files only, and the folders keep their names'
+ * order, because a folder's own date says nothing about what is inside it.
+ */
+export function sortEntries(
+  entries: Entry[],
+  sort: TreeSort = 'name-asc',
+  modified: Record<string, number> = {},
+): Entry[] {
+  const folders = entries.filter((entry) => entry.kind === 'directory').toSorted(byName)
+  const files = entries.filter((entry) => entry.kind !== 'directory')
+  const when = (entry: Entry) => modified[entry.id] ?? 0
+  switch (sort) {
+    case 'name-desc':
+      return [...folders.toReversed(), ...files.toSorted(byName).toReversed()]
+    case 'modified-desc':
+      return [...folders, ...files.toSorted((a, b) => when(b) - when(a) || byName(a, b))]
+    case 'modified-asc':
+      return [...folders, ...files.toSorted((a, b) => when(a) - when(b) || byName(a, b))]
+    default:
+      return [...folders, ...files.toSorted(byName)]
+  }
 }
 
 export interface TreeHandlers {
@@ -87,11 +119,15 @@ export const FileTree = memo(function FileTree({
   ...on
 }: Props) {
   const filter = data.filter.trim().toLowerCase()
-  const entries = (data.children[parentId] ?? []).filter((entry) => {
-    // Notes and everything the app can show; the rest only when asked for.
-    if (entry.kind === 'file' && !showAllFiles && !viewerOf(entry.name)) return false
-    return filter === '' || matchesFilter(data, entry, filter)
-  })
+  const entries = sortEntries(
+    (data.children[parentId] ?? []).filter((entry) => {
+      // Notes and everything the app can show; the rest only when asked for.
+      if (entry.kind === 'file' && !showAllFiles && !viewerOf(entry.name)) return false
+      return filter === '' || matchesFilter(data, entry, filter)
+    }),
+    data.sort,
+    data.modified,
+  )
 
   return (
     <ul className={'tree' + (depth > 0 ? ' is-nested' : '')} role="group">
@@ -177,7 +213,10 @@ export const FileTree = memo(function FileTree({
                   }
                   // The system trash makes this recoverable, but it still asks
                   // for the modifier so a stray Backspace cannot do it.
-                  if ((event.key === 'Backspace' || event.key === 'Delete') && event.metaKey) {
+                  if (
+                    (event.key === 'Backspace' || event.key === 'Delete') &&
+                    (event.metaKey || event.ctrlKey)
+                  ) {
                     event.preventDefault()
                     on.onTrash(entry)
                   }
