@@ -13,9 +13,9 @@ import { useEffect, useMemo, useState } from 'react'
 import {
   Archive,
   ArrowLeft,
+  CheckCheck,
   ChevronRight,
   GitCommitHorizontal,
-  MessageSquareWarning,
   MonitorSmartphone,
   Pencil,
   ThumbsDown,
@@ -101,7 +101,11 @@ const m = {
   archived: (n: number) => `Arquivadas · ${n}`,
   backToActive: 'Voltar para as ativas',
   archivedTitle: 'Confirmadas e arquivadas',
-  feedback: 'Seu retorno',
+  thread: {
+    rejected: 'Ainda não',
+    delivered: 'Claude entregou',
+    ignored: 'Claude decidiu não fazer',
+  },
   filters: {
     all: 'Todas',
     open: 'Abertas',
@@ -175,10 +179,6 @@ const CODE_KEY = 'markdown-viewer.feedback-code'
 
 const inFilter = (s: Status, f: Filter) =>
   s !== 'archived' && (f === 'all' || (f === 'open' ? s === 'open' || s === 'discussing' : s === f))
-const findLast = <T,>(arr: T[], pred: (x: T) => boolean) => {
-  for (let i = arr.length - 1; i >= 0; i--) if (pred(arr[i]!)) return i
-  return -1
-}
 const fmtWhen = (iso: string) =>
   new Date(iso).toLocaleString('pt-BR', {
     day: 'numeric',
@@ -590,13 +590,14 @@ function NoteCard({
   const [comment, setComment] = useState('')
   const r = note.resolution ?? {}
   const delivered = note.status === 'done' || note.status === 'ignored'
-  // The user's latest 👎 comment, shown until Claude delivers again.
-  const lastReject = findLast(note.log, (l) => l.action === 'rejected')
-  const lastDelivery = findLast(
-    note.log,
-    (l) => l.action === 'status' && (l.detail?.status === 'done' || l.detail?.status === 'ignored'),
+  // The whole conversation stays under the note, as in DailyFlow's note #35: each 👎 in
+  // Matheus's own words, with a divider saying when, and a divider for every delivery in
+  // between. The first delivery is only a divider too.
+  const thread = note.log.filter(
+    (l) =>
+      l.action === 'rejected' ||
+      (l.action === 'status' && (l.detail?.status === 'done' || l.detail?.status === 'ignored')),
   )
-  const feedback = lastReject > lastDelivery ? note.log[lastReject] : null
   const open = note.status === 'open'
   const hasResolution = !!(
     r.summary ||
@@ -743,15 +744,25 @@ function NoteCard({
         </p>
       )}
 
-      {feedback && (
-        <div className="feedback">
-          <MessageSquareWarning size={15} />
-          <div>
-            <span className="label">
-              {m.feedback} · {fmtWhen(feedback.ts)}
-            </span>
-            <p>{feedback.message}</p>
-          </div>
+      {thread.length > 0 && (
+        <div className="thread">
+          {thread.map((l, i) =>
+            l.action === 'rejected' ? (
+              <div key={i} className="thread-item">
+                <div className="thread-divider user">
+                  <ThumbsDown size={12} />
+                  {m.thread.rejected} · {fmtWhen(l.ts)}
+                </div>
+                <p className="note-body">{l.message}</p>
+              </div>
+            ) : (
+              <div key={i} className="thread-divider claude">
+                <CheckCheck size={12} />
+                {m.thread[l.detail?.status === 'ignored' ? 'ignored' : 'delivered']} ·{' '}
+                {fmtWhen(l.ts)}
+              </div>
+            ),
+          )}
         </div>
       )}
 

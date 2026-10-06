@@ -36,9 +36,13 @@ dados ficam no D1 `markdown-viewer-feedback`, tabelas `notes` e `note_log` (ver
   `done` | `ignored` → o Matheus testa: 👍 = `archived` (log `confirmed`); 👎 = volta
   para `open` com comentário (log `rejected`, texto em `note_log.message`). O texto
   (`body`) é do Matheus: nunca altere. Nunca arquive você mesmo: só o 👍 dele arquiva.
-- **Nota reaberta com 👎:** leia o comentário antes de refazer (está no `show`). Ao
-  entregar de novo, envie a lista `done` completa (a anterior mais o que mudou) e
-  explique na mensagem o que foi corrigido em resposta ao comentário.
+- **A conversa fica embaixo da nota:** o app mostra cada 👎 com o texto do Matheus e um
+  divisor para cada entrega (`done` ou `ignored`) entre eles, na ordem. Por isso a
+  mensagem de cada entrega precisa se sustentar sozinha.
+- **Nota reaberta com 👎:** leia a conversa inteira antes de refazer (está no `show`),
+  não só o último comentário. Ao entregar de novo, envie a lista `done` completa (a
+  anterior mais o que mudou) e explique na mensagem o que foi corrigido em resposta ao
+  comentário.
 - **Atualizar sempre pelo script** (muda status, mescla a resolução e grava no histórico
   numa instrução só, pela tabela `note_claude`):
   - começar a discutir: `npm run feedback -- 3 discussing "Perguntei X; aguardando decisão"`
@@ -51,3 +55,13 @@ dados ficam no D1 `markdown-viewer-feedback`, tabelas `notes` e `note_log` (ver
 - Seja exato: o que foi feito, o que ficou de fora e por quê, decisões tomadas, commits
   (sha curto) e em que versão saiu. É isso que o Matheus lê no app.
 - Mudanças relevantes de escopo também vão para `docs/spec.md`.
+
+## Versão (sempre informar)
+
+- A versão do app é `version` em `apps/desktop/src-tauri/tauri.conf.json` (`0.X.Y`), a
+  mesma da tag da release. Aparece na barra de status.
+- **Suba a versão a cada entrega de notas, antes do commit da release:** o **minor**
+  (0.4.0 → 0.5.0) quando entrega notas ou funcionalidades novas, o **patch**
+  (0.5.0 → 0.5.1) para correção pequena de algo já entregue.
+- **Ao terminar, diga ao Matheus a versão lançada (`v0.X.Y`)** e registre-a no
+  `deployed` da nota. Sem isso a entrega não está completa.

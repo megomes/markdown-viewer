@@ -155,8 +155,13 @@
 .fb-layer .verify .reject { display: flex; flex-direction: column; gap: 8px; width: 100%; }
 .fb-layer .thumb.up:hover { color: var(--c-green); border-color: color-mix(in srgb, var(--c-green) 50%, var(--border-input)); }
 .fb-layer .thumb.down:hover { color: var(--danger); border-color: color-mix(in srgb, var(--danger) 50%, var(--border-input)); }
-.fb-layer .feedback { display: flex; gap: 10px; padding: 9px 12px; border-radius: 8px; background: color-mix(in srgb, var(--c-orange) 10%, var(--bg-surface)); border: 1px solid color-mix(in srgb, var(--c-orange) 35%, var(--border-default)); }
-.fb-layer .feedback > svg { color: var(--c-orange); flex: none; margin-top: 2px; }
-.fb-layer .feedback p { margin: 2px 0 0; font-size: 13.5px; white-space: pre-wrap; }
 .fb-layer .note.s-archived { background: color-mix(in srgb, var(--bg-surface) 60%, var(--bg-app)); }
 .fb-layer .note.s-archived .note-body { color: var(--text-secondary); }
+
+/* A conversa fica embaixo da nota (nota #35 do DailyFlow). */
+.fb-layer .thread { display: flex; flex-direction: column; gap: 8px; }
+.fb-layer .thread-divider { display: flex; align-items: center; gap: 6px; font-size: 11.5px; font-weight: 600; letter-spacing: .02em; color: var(--text-muted); }
+.fb-layer .thread-divider::after { content: ''; flex: 1; height: 1px; background: var(--border-subtle); }
+.fb-layer .thread-divider.user { color: var(--c-orange); }
+.fb-layer .thread-divider.claude { color: var(--c-green); }
+.fb-layer .thread-item .note-body { margin: 4px 0 0; }

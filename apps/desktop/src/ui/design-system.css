@@ -171,6 +171,7 @@
  */
 .sidebar > .spaces,
 .sidebar > .brand,
+.sidebar > .sidebar-tools,
 .sidebar > .bookmarks,
 .sidebar > .search,
 .sidebar > .nav-notice,
@@ -209,8 +210,38 @@
   flex: 0 0 auto;
 }
 
+/*
+ * The brand row is a header now, as in the reference: the mark and the name,
+ * and nothing to press. The buttons moved to a row of their own below the
+ * spaces, so the mark no longer stands in a line of buttons looking like one
+ * of them, and the name has room again at any width.
+ */
+.brand {
+  gap: 0.625rem;
+  padding: 0 0 0 0.125rem;
+}
+
+@container sidebar (max-width: 282px) {
+  .brand-name {
+    display: block;
+  }
+
+  .brand > svg {
+    margin-right: 0;
+  }
+}
+
+/* The tools: settings, feedback, sync, theme, fold the sidebar. Spread across the row so each
+   is easy to hit, with no label to need the room. */
+.sidebar-tools {
+  display: flex;
+  flex: 0 0 auto;
+  justify-content: space-between;
+  padding: 0 0.25rem;
+}
+
 .brand-name {
-  font-size: 0.9375rem;
+  font-size: 0.875rem;
   font-weight: 600;
   letter-spacing: -0.02em;
 }

@@ -1240,6 +1240,10 @@ export function App() {
           the strip is empty and why the text below repeats the attribute. */}
       <div className="drag-strip" data-drag-window />
       <aside className="sidebar">
+        <div className="brand" data-drag-window>
+          <BrandMark />
+          <span className="brand-name">markdown-viewer</span>
+        </div>
         <SpaceStrip
           spaces={spaces}
           active={space.id}
@@ -1250,9 +1254,7 @@ export function App() {
             if (closing.baseId && actions.closeBase(closing.baseId)) switchSpace('vault')
           }}
         />
-        <div className="brand" data-drag-window>
-          <BrandMark />
-          <span className="brand-name">markdown-viewer</span>
+        <div className="sidebar-tools">
           <button
             type="button"
             className="icon-button"
