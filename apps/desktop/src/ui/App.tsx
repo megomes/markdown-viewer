@@ -112,6 +112,37 @@ function toSessionTab(tab: Tab, view: ViewState | undefined): SessionTab {
 /** How long the typing has to stop before the file is written. */
 const AUTOSAVE_DELAY = 1500
 
+/**
+ * A file inside a folder (the vault or another) saves itself, as in Obsidian:
+ * there is no unsaved state there. Loose files and drafts follow the setting.
+ */
+function inFolder(tab: Tab): boolean {
+  return tab.path !== '' && !isDraft(tab)
+}
+
+/**
+ * Where a new note goes, read from the vault's Obsidian settings so that both
+ * apps agree: the root (Obsidian's default), the folder of the open file, or a
+ * fixed folder.
+ */
+async function newFileFolder(baseId: string, current: string): Promise<string> {
+  try {
+    const loaded = await fileSystem().read(baseId, '.obsidian/app.json')
+    const config = JSON.parse(loaded.text) as {
+      newFileLocation?: string
+      newFileFolderPath?: string
+    }
+    if (config.newFileLocation === 'current') return current
+    if (config.newFileLocation === 'folder') {
+      const fixed = (config.newFileFolderPath ?? '').replace(/^\/+|\/+$/g, '')
+      if (fixed && (await fileSystem().stat(baseId, fixed))) return fixed
+    }
+  } catch {
+    // no settings, or not Obsidian's: the root
+  }
+  return ''
+}
+
 export function App() {
   const { state, actions } = useWorkspace()
   const { settings, update, reset } = useSettings()
@@ -439,10 +470,29 @@ export function App() {
       there.find((tab) => tab.id === lastActive.current[id]) ?? there[there.length - 1] ?? null
     actions.activateTab(target?.id ?? null)
   }
-  const spaceRef = useRef({ id: space.id, vault })
+  const spaceRef = useRef({ id: space.id, vault, baseId: space.baseId })
   useEffect(() => {
-    spaceRef.current = { id: space.id, vault }
+    spaceRef.current = { id: space.id, vault, baseId: space.baseId }
   })
+
+  /**
+   * "Nova nota", as in Obsidian: inside a folder there is no draft and no
+   * dialog. The file is born on disk, in the place the vault's own settings
+   * say (`.obsidian/app.json`, root by default), opens, and waits for its name.
+   * Only outside any folder ("Arquivos") is it still a draft.
+   */
+  const newNote = useCallback(async () => {
+    const baseId = spaceRef.current.baseId
+    if (!baseId) {
+      actions.newNote()
+      return
+    }
+    const tab = latestTab.current
+    const current = tab && tab.baseId === baseId && tab.path ? parentPath(tab.path) : ''
+    const folder = await newFileFolder(baseId, current)
+    await actions.revealPath(baseId, folder ? folder + '/x' : '')
+    await createIn(baseId, folder, 'file')
+  }, [actions, createIn])
 
   useVaultLinks({
     indexes: state.index,
@@ -751,7 +801,8 @@ export function App() {
     // the note that floats out of it: it is one note in two places, and it
     // cannot follow two rules. A draft has no file to save to, and text that
     // came from the other window is that window's to write.
-    if (!(settings.autosave || pinnedActive) || !activeDoc || !activeTab) return
+    if (!activeDoc || !activeTab) return
+    if (!(settings.autosave || pinnedActive || inFolder(activeTab))) return
     if (isDraft(activeTab) || activeDoc.remote) return
     const { text, dirty, conflict } = activeDoc
     if (text === undefined || !dirty || conflict) return
@@ -816,7 +867,8 @@ export function App() {
     const onBlur = () => {
       // A pinned draft has no file yet, and saving it would ask where to put it.
       const pinnedFile = pinnedActive && activeTab !== null && !isDraft(activeTab)
-      if (settings.autosave || pinnedFile) saveActive()
+      const folderFile = activeTab !== null && inFolder(activeTab)
+      if (settings.autosave || pinnedFile || folderFile) saveActive()
     }
     const onFocus = () => void actions.checkExternalChanges()
     window.addEventListener('blur', onBlur)
@@ -993,7 +1045,7 @@ export function App() {
             if (activeId) void actions.save(activeId)
             break
           case 'newFile':
-            actions.newNote()
+            void newNote()
             break
           case 'openBase':
             void actions.openBase()
@@ -1097,6 +1149,7 @@ export function App() {
       actions,
       closeTab,
       documentMenu,
+      newNote,
       once,
       reopenTab,
       settings.dock,
@@ -1271,7 +1324,7 @@ export function App() {
         </div>
 
         <div className="nav-actions">
-          <button type="button" className="nav-action" onClick={() => actions.newNote()}>
+          <button type="button" className="nav-action" onClick={() => void newNote()}>
             <FilePlusIcon />
             Nova nota
           </button>
