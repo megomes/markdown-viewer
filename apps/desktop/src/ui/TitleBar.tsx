@@ -14,7 +14,6 @@
 import { useEffect, useLayoutEffect, useRef, useState, type CSSProperties } from 'react'
 import { isDesktop } from '~/platform'
 import type { CommandId, MenuNode } from './app-menu'
-import { BrandMark } from './icons'
 
 type Native = Extract<MenuNode, { kind: 'native' }>['item']
 
@@ -221,9 +220,6 @@ export function TitleBar({ plan, run }: Props) {
   return (
     <>
       <header ref={bar} className="titlebar" data-drag-window>
-        <span className="titlebar-mark" aria-hidden="true">
-          <BrandMark size={16} />
-        </span>
         <nav className="titlebar-menus" aria-label="Menu">
           {menus.map((node, index) => (
             <button

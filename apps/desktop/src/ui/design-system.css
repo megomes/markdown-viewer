@@ -717,18 +717,12 @@
 }
 
 /*
- * The mark sits in line with the one at the top of the sidebar below it: the
- * shell's gap, the sidebar's edge and inset, and half the difference in size
- * (16px here, 22px there). Closer in, it crowded the rounded corner.
+ * The first menu's label lines up with the sidebar's content below it: the
+ * shell's gap, the sidebar's edge and inset, less the menu's own padding.
  */
-.titlebar-mark {
-  display: flex;
-  align-items: center;
-  padding: 0 0.875rem 0 calc(0.625rem + 1px + 0.75rem + 0.125rem + 3px);
-}
-
 .titlebar-menus {
   display: flex;
+  padding-left: calc(0.625rem + 1px + 0.75rem - 0.5rem);
   align-items: center;
   gap: 1px;
 }
