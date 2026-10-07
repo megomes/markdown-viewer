@@ -2,7 +2,7 @@
  * Roda as Bases (`.base`) de um vault e mostra o que cada visão devolve, para
  * comparar com o Obsidian lado a lado. Só lê.
  *
- *   npm run base:check -- "C:\Users\mathe\Documents\Obsidian Notes"
+ *   npm run base:check -- "C:\Users\alex\Documents\Vault"
  */
 
 import { readdirSync, readFileSync, statSync } from 'node:fs'

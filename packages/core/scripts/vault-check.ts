@@ -1,7 +1,7 @@
 /**
  * Percorre um vault e lista todo link, embed e alias que não resolve.
  *
- *   npm run vault:check -- "C:\Users\mathe\Documents\Obsidian Notes"
+ *   npm run vault:check -- "C:\Users\alex\Documents\Vault"
  *   npm run vault:check -- <vault> --json     a lista inteira, para comparar depois
  *
  * É o teste de aceite da seção 6.1 da spec: o que sair aqui tem que ser o que já

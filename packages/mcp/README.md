@@ -23,7 +23,7 @@ npm run build -w @markdown-viewer/mcp
 No Claude Code, uma vez por máquina:
 
 ```bash
-claude mcp add vault --scope user -- node "C:\Users\mathe\Code\markdown-viewer\packages\mcp\dist\server.mjs" "C:\Users\mathe\Documents\Obsidian Notes"
+claude mcp add vault --scope user -- node "C:\Users\alex\Code\markdown-viewer\packages\mcp\dist\server.mjs" "C:\Users\alex\Documents\Vault"
 ```
 
 No app do Claude (desktop), em `claude_desktop_config.json`, dentro de `mcpServers`:
@@ -32,8 +32,8 @@ No app do Claude (desktop), em `claude_desktop_config.json`, dentro de `mcpServe
 "vault": {
   "command": "node",
   "args": [
-    "C:\Users\mathe\Code\markdown-viewer\packages\mcp\dist\server.mjs",
-    "C:\Users\mathe\Documents\Obsidian Notes"
+    "C:\Users\alex\Code\markdown-viewer\packages\mcp\dist\server.mjs",
+    "C:\Users\alex\Documents\Vault"
   ]
 }
 ```
@@ -43,7 +43,7 @@ No Mac, troque os dois caminhos pelos de lá.
 ## Conferir
 
 ```bash
-node packages/mcp/scripts/smoke.mjs "C:\Users\mathe\Documents\Obsidian Notes"
+node packages/mcp/scripts/smoke.mjs "C:\Users\alex\Documents\Vault"
 ```
 
 Sobe o servidor e chama as ferramentas de leitura. Nunca chama `rename`.

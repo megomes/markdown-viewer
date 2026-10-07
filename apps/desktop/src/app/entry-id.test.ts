@@ -7,7 +7,7 @@ import { pathIn, reducer, type State, type Doc } from './store'
  * loaded text, and the note seemed to close.
  */
 
-const BASE = 'C:\\Users\\mathe\\Documents\\MainVault'
+const BASE = 'C:\\Users\\alex\\Documents\\MainVault'
 const id = (path: string) => BASE + ':' + path
 
 describe('pathIn', () => {
@@ -17,7 +17,7 @@ describe('pathIn', () => {
   })
 
   it('refuses an id of another base, even one that starts the same', () => {
-    expect(pathIn('C:\\Users\\mathe\\Documents\\MainVault2:a.md', BASE)).toBeNull()
+    expect(pathIn('C:\\Users\\alex\\Documents\\MainVault2:a.md', BASE)).toBeNull()
     expect(pathIn('C:a.md', 'C')).toBe('a.md')
   })
 

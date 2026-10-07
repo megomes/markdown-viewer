@@ -45,7 +45,7 @@ mobile, que conversa com o celular.
 
 ## 4. O que o vault mostrou
 
-Levantamento de `C:\Users\mathe\Documents\Obsidian Notes` em 2026-10-04.
+Levantamento de `C:\Users\alex\Documents\Vault` em 2026-10-04.
 
 **Tamanho.** 1,3 GB no total. 945 MB são 154 PDFs (manuais de Flight Sim, o maior com
 140 MB), 156 MB são imagens, e as 844 notas `.md` somam 11,8 MB. Os PDFs grandes não

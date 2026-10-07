@@ -3,7 +3,7 @@ import { baseName, nativeBaseName, withoutExtension } from './fs'
 
 describe('nativeBaseName', () => {
   it('cuts a Windows path at its backslashes', () => {
-    expect(nativeBaseName('C:\\Users\\mathe\\Downloads\\jev-test\\README.md')).toBe('README.md')
+    expect(nativeBaseName('C:\\Users\\alex\\Downloads\\jev-test\\README.md')).toBe('README.md')
   })
 
   it('cuts a Unix path at its slashes', () => {
@@ -11,7 +11,7 @@ describe('nativeBaseName', () => {
   })
 
   it('takes the last separator when a path carries both', () => {
-    expect(nativeBaseName('C:\\Users\\mathe/Downloads\\nota.md')).toBe('nota.md')
+    expect(nativeBaseName('C:\\Users\\alex/Downloads\\nota.md')).toBe('nota.md')
   })
 
   it('a bare name is already its own name', () => {
@@ -19,7 +19,7 @@ describe('nativeBaseName', () => {
   })
 
   it('a path ending in a separator still has a name', () => {
-    expect(nativeBaseName('C:\\Users\\mathe\\Downloads\\')).toBe('Downloads')
+    expect(nativeBaseName('C:\\Users\\alex\\Downloads\\')).toBe('Downloads')
     expect(nativeBaseName('/Users/reasset/Downloads/')).toBe('Downloads')
   })
 })

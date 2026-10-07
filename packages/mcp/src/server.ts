@@ -2,7 +2,7 @@
 /**
  * The vault's MCP server, over stdio.
  *
- *   node packages/mcp/dist/server.mjs "C:\Users\mathe\Documents\Obsidian Notes"
+ *   node packages/mcp/dist/server.mjs "C:\Users\alex\Documents\Vault"
  *
  * Or with VAULT_PATH set. It reads the vault straight from disk and does not need
  * the app to be open. Claude keeps editing files directly, as before: this gives

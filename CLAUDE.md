@@ -15,7 +15,7 @@ do desktop está em [docs/releases.md](docs/releases.md).
 
 ## Feedback do app: fila de trabalho do Matheus
 
-O feedback deste app é o **feedback-kit** (`~/Code/feedback-kit`, repositório privado
+O feedback deste app é o **feedback-kit** (`~/Code/feedback-kit`, repositório
 `megomes/feedback-kit`), o mesmo de todos os apps do Matheus, com o app `markdown-viewer`
 (`feedback-kit.json` na raiz). Quando ele pedir "faz os ids 2, 3, 4 e 5", é dessa fila:
 **use a skill `feedback-kit`**, que tem as regras (estados, 👍/👎, conversa, resolução,
