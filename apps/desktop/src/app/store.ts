@@ -163,7 +163,7 @@ const initialState: State = {
   restored: false,
 }
 
-function reducer(state: State, action: Action): State {
+export function reducer(state: State, action: Action): State {
   switch (action.type) {
     case 'base/added': {
       // Opening the same folder twice, or restoring one that is already open,
@@ -384,14 +384,12 @@ function reducer(state: State, action: Action): State {
 
       const docs: Record<string, Doc> = {}
       for (const [id, doc] of Object.entries(state.docs)) {
-        const [base, path] = splitEntryId(id)
-        docs[base === action.baseId && under(path) ? entryId(base, moved(path)) : id] = doc
+        docs[remapId(id, action.baseId, under, moved)] = doc
       }
 
       const expanded: Record<string, boolean> = {}
       for (const [id, open] of Object.entries(state.expanded)) {
-        const [base, path] = splitEntryId(id)
-        expanded[base === action.baseId && under(path) ? entryId(base, moved(path)) : id] = open
+        expanded[remapId(id, action.baseId, under, moved)] = open
       }
 
       const tabs = state.tabs.map((tab) => {
@@ -456,6 +454,14 @@ export function useWorkspace() {
    * callbacks, and they all render again for nothing.
    */
   const latest = useRef(state)
+  /**
+   * A file asked for while the session is still coming back (the system opening
+   * the app with a double click on a .md). The restore reopens the old tabs after
+   * it and used to bring the old active one forward, over the file just asked for
+   * (note #9); it brings this one forward instead.
+   */
+  const chosen = useRef<string | null>(null)
+  const restoring = useRef(false)
   useEffect(() => {
     latest.current = state
   })
@@ -872,13 +878,16 @@ export function useWorkspace() {
   )
 
   const trashEntry = useCallback(
-    async (entry: Entry) => {
+    /** Resolves to whether the entry went to the trash. */
+    async (entry: Entry): Promise<boolean> => {
       try {
         await fileSystem().trash(entry.baseId, entry.path)
         dispatch({ type: 'entry/removed', baseId: entry.baseId, path: entry.path })
         await loadChildren(entry.baseId, parentPath(entry.path))
+        return true
       } catch (error) {
         report(error)
+        return false
       }
     },
     [loadChildren, report],
@@ -922,6 +931,7 @@ export function useWorkspace() {
         }
 
         const id = entryId(file.baseId, file.path)
+        if (restoring.current) chosen.current = id
         dispatch({
           type: 'tab/opened',
           tab: {
@@ -1178,6 +1188,7 @@ export function useWorkspace() {
    */
   const restoreSession = useCallback(
     async (session: Session, interactive: boolean) => {
+      restoring.current = true
       const pending: string[] = []
       const available = new Set<string>()
 
@@ -1197,8 +1208,9 @@ export function useWorkspace() {
       }
 
       for (const id of byDepth(session.expanded)) {
-        const [baseId, path] = splitEntryId(id)
-        if (!available.has(baseId)) continue
+        const baseId = [...available].find((base) => pathIn(id, base) !== null)
+        if (baseId === undefined) continue
+        const path = pathIn(id, baseId)!
         dispatch({ type: 'folder/expanded', id })
         await loadChildren(baseId, path)
       }
@@ -1227,7 +1239,10 @@ export function useWorkspace() {
         }
       }
 
-      if (
+      const asked = chosen.current
+      if (asked && latest.current.tabs.some((tab) => tab.id === asked)) {
+        dispatch({ type: 'tab/activated', id: asked })
+      } else if (
         session.activeId &&
         (latest.current.docs[session.activeId] ||
           latest.current.tabs.some((tab) => tab.id === session.activeId)) &&
@@ -1235,6 +1250,8 @@ export function useWorkspace() {
       ) {
         dispatch({ type: 'tab/activated', id: session.activeId })
       }
+      chosen.current = null
+      restoring.current = false
 
       dispatch({ type: 'session/restored', pending })
     },
@@ -1322,10 +1339,17 @@ export function useWorkspace() {
   return { state, actions }
 }
 
-/** `<baseId>:<path>`, where the path may itself be empty or contain colons. */
-function splitEntryId(id: string): [string, string] {
-  const cut = id.indexOf(':')
-  return cut < 0 ? [id, ''] : [id.slice(0, cut), id.slice(cut + 1)]
+/**
+ * The path of an entry id `<baseId>:<path>`, when it belongs to `baseId`; null when
+ * it does not.
+ *
+ * Asked against a known base rather than cut at a colon: on Windows the base itself
+ * is `C:\…`, and cutting at the first colon split it at the drive letter. Every
+ * id then looked like it belonged to a base called `C`, and a rename on Windows
+ * left the active tab and the loaded text behind under the old name (note #8).
+ */
+export function pathIn(id: string, baseId: string): string | null {
+  return id.startsWith(baseId + ':') ? id.slice(baseId.length + 1) : null
 }
 
 function toTab(tab: SessionTab): Tab {
@@ -1345,8 +1369,8 @@ function remapId(
   under: (path: string) => boolean,
   moved: (path: string) => string,
 ): string {
-  const [base, path] = splitEntryId(id)
-  return base === baseId && under(path) ? entryId(base, moved(path)) : id
+  const path = pathIn(id, baseId)
+  return path !== null && under(path) ? entryId(baseId, moved(path)) : id
 }
 
 /** How a tab is shown: the editor for notes, drafts and loose files, a viewer for the rest. */

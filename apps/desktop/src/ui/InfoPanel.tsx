@@ -1,7 +1,7 @@
 import { memo, useState } from 'react'
 import type { BaseIndex } from '@markdown-viewer/core/base-index'
-import type { Tab } from '~/app/store'
 import type { Heading } from '~/editor/outline'
+import { pathIn, type Tab } from '~/app/store'
 import { entryId } from '@markdown-viewer/core/fs'
 import { MarkdownIcon } from './icons'
 import { NoteComments } from './NoteComments'
@@ -126,7 +126,8 @@ function Links({ tab, index, onOpenPath }: LinksProps) {
   const incoming = index.backlinks[id] ?? []
   const outgoing = index.files[id]?.links ?? []
 
-  const label = (entry: string) => index.files[entry]?.title ?? entry.slice(entry.indexOf(':') + 1)
+  // Every link here is in this tab's base, so its path is what follows the base.
+  const label = (entry: string) => index.files[entry]?.title ?? pathIn(entry, tab.baseId) ?? entry
 
   return (
     <>

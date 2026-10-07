@@ -20,7 +20,7 @@ import { on, send, type LiveDoc } from '~/platform/channel'
 import { useDock } from './useDock'
 import { onTrayNewNote } from '~/platform/tray'
 import { DEFAULTS, LIMITS, useSettings } from '~/app/settings'
-import { tabViewer, useWorkspace, type Doc, type RenameTarget, type Tab } from '~/app/store'
+import { pathIn, tabViewer, useWorkspace, type Doc, type RenameTarget, type Tab } from '~/app/store'
 import { Viewer } from './viewers/Viewer'
 import { entryId, nativeBaseName, parentPath, type Entry } from '@markdown-viewer/core/fs'
 import type { Heading } from '~/editor/outline'
@@ -156,6 +156,8 @@ async function newFileFolder(baseId: string, current: string): Promise<string> {
 
 export function App() {
   const { state, actions } = useWorkspace()
+  // A handle for reading the workspace from the console during development.
+  if (import.meta.env.DEV) (window as unknown as { workspace?: unknown }).workspace = state
   const { settings, update, reset } = useSettings()
   const theme = useResolvedTheme(settings.themeMode)
   const [sidebarOpen, setSidebarOpen] = useState(() => loadSession()?.sidebarOpen ?? true)
@@ -345,7 +347,15 @@ export function App() {
             destructive: true,
             onSelect: () => {
               setQuestion(null)
-              void actions.trashEntry(entry)
+              void actions.trashEntry(entry).then((trashed) => {
+                if (!trashed) return
+                // A note that is gone does not stay pinned on the edge, nor do
+                // the ones inside a folder that went.
+                const gone = (pin: Pin) =>
+                  pin.baseId === entry.baseId &&
+                  (pin.path === entry.path || pin.path.startsWith(entry.path + '/'))
+                for (const pin of latestPins.current.filter(gone)) unpinRef.current(pin.id)
+              })
             },
           },
         ],
@@ -686,14 +696,21 @@ export function App() {
     liveDoc: useCallback((pinId: string) => liveOf(latestState.current.docs[pinId]), []),
 
     /**
-     * The square at the foot of the column writes an ordinary draft, in an
-     * ordinary tab.
-     *
-     * It is the same note in both places: unsaved in the tab strip and a
-     * square on the edge of the screen. Closing the tab throws the text away,
-     * so the square goes with it.
+     * The square at the foot of the column writes a new note, the same one
+     * "Nova nota" does (note #11): with a vault open, a file born in the vault,
+     * where its settings put new notes, saving itself like everything there.
+     * Only without a vault is it a draft, which lives in the app until saved.
      */
-    onNewNote: useCallback((): PinTarget | null => {
+    onNewNote: useCallback(async (): Promise<PinTarget | null> => {
+      const vaultId = spaceRef.current.vault
+      if (vaultId && latestState.current.bases.some((base) => base.id === vaultId)) {
+        const folder = await newFileFolder(vaultId, '')
+        const entry = await actions.createEntry(vaultId, folder, 'file')
+        if (entry) {
+          void actions.openFile(entry, false)
+          return { id: entry.id, baseId: entry.baseId, path: entry.path, name: entry.name }
+        }
+      }
       const taken = latestState.current.tabs.map((tab: Tab) => tab.name)
       const draft: Draft = {
         id: String(Date.now()) + '-' + Math.random().toString(36).slice(2, 8),
@@ -886,7 +903,7 @@ export function App() {
     const heldBases = kept ? kept.bases.filter((id) => waiting.has(id)) : []
     const heldFiles = kept ? kept.files.filter((id) => waiting.has(id)) : []
     const heldFolders = kept
-      ? kept.expanded.filter((id) => waiting.has(id.slice(0, id.indexOf(':'))))
+      ? kept.expanded.filter((id) => [...waiting].some((base) => pathIn(id, base) !== null))
       : []
 
     saveSession({
@@ -1887,6 +1904,8 @@ export function App() {
               void (space.kind === 'vault' && !space.baseId ? chooseVault() : actions.openBase())
             }
             onOpenFile={() => void actions.openLooseFile()}
+            onNewNote={() => void newNote()}
+            onQuickOpen={() => setQuickOpen(true)}
           />
         )}
 
@@ -2019,9 +2038,23 @@ interface EmptyStateProps {
   vaultMissing: boolean
   onOpenBase: () => void
   onOpenFile: () => void
+  onNewNote: () => void
+  onQuickOpen: () => void
 }
 
-function EmptyState({ hasBase, vaultMissing, onOpenBase, onOpenFile }: EmptyStateProps) {
+const capOf = (id: string) => {
+  const shortcut = SHORTCUTS.find((one) => one.id === id)
+  return shortcut ? keyCap(shortcut) : ''
+}
+
+function EmptyState({
+  hasBase,
+  vaultMissing,
+  onOpenBase,
+  onOpenFile,
+  onNewNote,
+  onQuickOpen,
+}: EmptyStateProps) {
   if (vaultMissing) {
     return (
       <div className="empty">
@@ -2043,14 +2076,30 @@ function EmptyState({ hasBase, vaultMissing, onOpenBase, onOpenFile }: EmptyStat
       </div>
     )
   }
+  // With a folder open, nothing open is a quiet line and two ways in, as in
+  // Obsidian, not a card that reads like a button (note #7).
+  if (hasBase) {
+    return (
+      <div className="empty is-quiet">
+        <div className="empty-quiet">
+          <p className="empty-quiet-title">Nenhum arquivo aberto</p>
+          <button type="button" className="empty-link" onClick={onNewNote}>
+            Criar nova nota <kbd>{capOf('newFile')}</kbd>
+          </button>
+          <button type="button" className="empty-link" onClick={onQuickOpen}>
+            Ir para um arquivo <kbd>{capOf('quickOpen')}</kbd>
+          </button>
+        </div>
+      </div>
+    )
+  }
   return (
     <div className="empty">
       <div className="empty-card">
-        <p className="empty-title">{hasBase ? 'Nenhum arquivo aberto' : 'Nenhuma pasta aberta'}</p>
+        <p className="empty-title">Nenhuma pasta aberta</p>
         <p className="empty-hint">
-          {hasBase
-            ? 'Um clique abre em prévia, dois cliques fixam a aba.'
-            : 'Abra uma pasta, ou um arquivo de qualquer lugar do disco. Nada é copiado, os arquivos ficam onde estão.'}
+          Abra uma pasta, ou um arquivo de qualquer lugar do disco. Nada é copiado, os arquivos
+          ficam onde estão.
         </p>
         {!hasBase && (
           <div className="empty-actions">

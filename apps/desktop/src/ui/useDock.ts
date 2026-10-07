@@ -73,8 +73,8 @@ export interface DockOptions {
    * shows this rather than the disk, so both show the same unsaved text.
    */
   liveDoc: (id: string) => LiveDoc | undefined
-  /** Asked for by the tab that writes a new note. */
-  onNewNote: () => PinTarget | null
+  /** Asked for by the tab that writes a new note; it may have to create a file first. */
+  onNewNote: () => PinTarget | null | Promise<PinTarget | null>
   /** Asked for from the kept note: bring it into the app. */
   onOpenInApp: (pin: Pin) => void
 }
@@ -339,8 +339,8 @@ export function useDock(options: DockOptions) {
         void openChipMenu(latest.current.kept === pin.id)
       }),
 
-      on('dock:new', () => {
-        const target = latest.current.options.onNewNote()
+      on('dock:new', async () => {
+        const target = await latest.current.options.onNewNote()
         if (!target) return
         setPins((current) => addPin(current, target))
         void closePeek()

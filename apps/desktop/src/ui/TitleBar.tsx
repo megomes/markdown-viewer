@@ -154,9 +154,14 @@ export function TitleBar({ plan, run }: Props) {
 
   // The shell leaves room for the bar only while it is there.
   useEffect(() => {
-    document.documentElement.dataset.titlebar = 'custom'
+    const root = document.documentElement.dataset
+    root.titlebar = 'custom'
+    // Only the Windows window is created transparent (tauri.windows.conf.json),
+    // so only there does the interface draw the rounded corners itself.
+    if (/Windows/.test(navigator.userAgent)) root.transparent = 'true'
     return () => {
-      delete document.documentElement.dataset.titlebar
+      delete root.titlebar
+      delete root.transparent
     }
   }, [])
 

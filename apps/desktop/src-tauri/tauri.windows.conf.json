@@ -1,0 +1,21 @@
+{
+  "$schema": "../../../node_modules/@tauri-apps/cli/config.schema.json",
+  "app": {
+    "windows": [
+      {
+        "title": "markdown-viewer",
+        "width": 1180,
+        "height": 780,
+        "resizable": true,
+        "fullscreen": false,
+        "minWidth": 720,
+        "minHeight": 480,
+        "visible": false,
+        "dragDropEnabled": false,
+        "decorations": false,
+        "transparent": true,
+        "shadow": false
+      }
+    ]
+  }
+}

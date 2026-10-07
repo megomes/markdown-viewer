@@ -193,12 +193,17 @@ export const FileTree = memo(function FileTree({
                 }}
                 onDragLeave={(event) => event.currentTarget.classList.remove('is-drop-target')}
                 onDrop={(event) => {
+                  event.currentTarget.classList.remove('is-drop-target')
+                  // A row that cannot take the entry (a note over a note of its own
+                  // folder) lets the drop go on up to the root, which can: taking
+                  // it here and doing nothing is what kept a file from leaving its
+                  // folder (note #6).
+                  if (!canDrop(dragged, entry.baseId, dropFolder)) return
                   event.preventDefault()
                   event.stopPropagation()
-                  event.currentTarget.classList.remove('is-drop-target')
                   const moving = dragged
                   dragged = null
-                  if (canDrop(moving, entry.baseId, dropFolder)) on.onMove(moving, dropFolder)
+                  on.onMove(moving, dropFolder)
                 }}
                 onClick={() => openEntry(true)}
                 onDoubleClick={() => entry.kind === 'file' && openEntry(false)}
