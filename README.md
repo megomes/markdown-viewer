@@ -215,6 +215,10 @@ docs/             Spec, design system and release process
 
 The full plan lives in [`docs/spec.md`](docs/spec.md) (in Portuguese).
 
+## License
+
+[MIT](LICENSE)
+
 <br>
 
 <div align="center">
