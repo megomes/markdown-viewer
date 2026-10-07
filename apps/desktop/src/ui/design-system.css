@@ -662,6 +662,21 @@
   background: transparent;
 }
 
+/* A dark colour scheme on the root makes the browser fill the page with dark
+   grey behind a transparent background, which is the square that showed in the
+   corners (note #12). The root stays neutral; the page below takes the theme. */
+:root[data-transparent='true'][data-theme] {
+  color-scheme: normal;
+}
+
+:root[data-transparent='true'][data-theme='dark'] body {
+  color-scheme: dark;
+}
+
+:root[data-transparent='true'][data-theme='light'] body {
+  color-scheme: light;
+}
+
 :root[data-transparent='true'] #root {
   position: relative;
   overflow: hidden;

@@ -6,8 +6,9 @@
     <title>markdown-viewer</title>
     <!--
       The colour of the theme before any CSS or JavaScript arrives, so the window
-      never shows white while the app loads. Only the app's own window: the
-      panels on the edge of the screen are transparent and must stay so.
+      never shows white while the app loads. Only the app's own window, and not on
+      Windows: the panels on the edge of the screen, and the Windows main window,
+      are transparent and must stay so.
     -->
     <script>
       ;(function () {
@@ -17,6 +18,14 @@
               ? window.__TAURI_INTERNALS__.metadata.currentWindow.label
               : 'main'
           if (label !== 'main' || /[?&]window=/.test(location.search)) return
+          // On Windows the main window is created transparent, with round corners
+          // the interface draws (tauri.windows.conf.json): a background here would
+          // fill the corners in. It needs none, because it stays hidden until the
+          // app's first paint.
+          if (window.__TAURI_INTERNALS__ && /Windows/.test(navigator.userAgent)) {
+            document.documentElement.dataset.transparent = 'true'
+            return
+          }
           var mode =
             JSON.parse(localStorage.getItem('markdown-viewer.settings') || '{}').themeMode ||
             'system'
