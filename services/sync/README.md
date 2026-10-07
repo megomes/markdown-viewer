@@ -1,7 +1,7 @@
 # services/sync
 
-O servidor do sync (seção 6.5 de `docs/spec.md`), em
-`https://markdown-viewer-sync.megomes.workers.dev`.
+O servidor do sync (seção 6.5 de `docs/spec.md`). Depois do `npm run deploy`, o
+endereço do Worker vai em `VITE_SYNC_SERVER` (app) e `MARKDOWN_VIEWER_SYNC_URL` (scripts).
 
 - **Worker** (`src/index.ts`): encaminha `/v/<vault>/…` para o Durable Object do vault.
 - **Durable Object** `Vault` (`src/vault.ts`), um por vault, com SQLite próprio: o log de

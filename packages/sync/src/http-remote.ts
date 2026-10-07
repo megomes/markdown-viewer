@@ -13,7 +13,14 @@ import {
 } from '@markdown-viewer/crypto/vault-crypto'
 import type { Commit, CommitResult, Remote, RemoteEntry } from './protocol'
 
-export const DEFAULT_SERVER = 'https://markdown-viewer-sync.megomes.workers.dev'
+/** The sync server (services/sync) has no default: each caller passes the one it deployed. */
+export function requireServer(server: string | undefined): string {
+  if (!server)
+    throw new Error(
+      'No sync server configured: set VITE_SYNC_SERVER (desktop) or MARKDOWN_VIEWER_SYNC_URL (scripts).',
+    )
+  return server.replace(/\/+$/, '')
+}
 
 export interface Connection {
   server: string

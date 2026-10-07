@@ -17,10 +17,11 @@ import { STAGE } from '~/app/client-context'
 import { isDesktop } from '~/platform'
 import './feedback.css'
 
-const KIT: string = (
-  (import.meta.env.VITE_FEEDBACK_KIT_URL as string | undefined) ??
-  'https://feedback-kit.megomes.workers.dev'
-).replace(/\/+$/, '')
+// The feedback-kit Worker, set at build time (see apps/desktop/.env.example).
+const KIT: string = ((import.meta.env.VITE_FEEDBACK_KIT_URL as string | undefined) ?? '').replace(
+  /\/+$/,
+  '',
+)
 const APP = 'markdown-viewer'
 const CACHE_KEY = 'markdown-viewer.feedback-kit.widget'
 /** Where the code lived before the kit; moved once to the kit's own key. */

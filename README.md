@@ -136,6 +136,8 @@ npm run deploy
 ```
 
 See [`services/sync`](services/sync) for the setup code and the secrets the Worker expects.
+Then point the app at it: copy `apps/desktop/.env.example` to `apps/desktop/.env.local` and set
+`VITE_SYNC_SERVER` to your Worker's URL.
 
 ## MCP server
 

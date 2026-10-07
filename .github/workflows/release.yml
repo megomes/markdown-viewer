@@ -104,6 +104,9 @@ jobs:
           # every app it reached.
           TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
           TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
+          # The servers this build talks to (apps/desktop/.env.example); kept out of the code.
+          VITE_SYNC_SERVER: ${{ secrets.SYNC_SERVER_URL }}
+          VITE_FEEDBACK_KIT_URL: ${{ secrets.FEEDBACK_KIT_URL }}
         with:
           projectPath: apps/desktop
           tagName: ${{ github.ref_name }}

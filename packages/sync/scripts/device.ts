@@ -19,7 +19,7 @@ import { VaultCrypto } from '@markdown-viewer/crypto/vault-crypto'
 import { SyncEngine } from '../src/engine'
 import {
   createVault,
-  DEFAULT_SERVER,
+  requireServer,
   httpRemote,
   joinVault,
   listen,
@@ -38,7 +38,7 @@ if (!command || !folder) {
   process.exit(1)
 }
 const stateDir = folder.replace(/[\\/]+$/, '') + '.sync'
-const server = flag('server') ?? DEFAULT_SERVER
+const server = requireServer(flag('server') ?? process.env.MARKDOWN_VIEWER_SYNC_URL)
 
 interface Saved {
   connection: Connection

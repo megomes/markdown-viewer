@@ -12,7 +12,7 @@ import { VaultCrypto } from '@markdown-viewer/crypto/vault-crypto'
 import { SyncEngine } from '@markdown-viewer/sync/engine'
 import {
   createVault,
-  DEFAULT_SERVER,
+  requireServer,
   httpRemote,
   joinVault,
   listDevices,
@@ -31,6 +31,9 @@ import {
   TauriStateStore,
   TauriSyncFiles,
 } from '~/platform/sync-tauri'
+
+/** The sync server (services/sync) this build talks to: VITE_SYNC_SERVER, see apps/desktop/.env.example. */
+const SYNC_SERVER = import.meta.env.VITE_SYNC_SERVER as string | undefined
 
 const SECRET = (vault: string) => `sync:${vault}`
 const PERIOD = 60_000
@@ -176,7 +179,7 @@ export async function setUpVault(options: {
   folder: string
   server?: string
 }): Promise<string> {
-  const server = options.server ?? DEFAULT_SERVER
+  const server = requireServer(options.server ?? SYNC_SERVER)
   const { connection, key, recoveryCode } = await createVault({ ...options, server })
   await remember(
     {
@@ -202,7 +205,7 @@ export async function joinExistingVault(options: {
   folder: string
   server?: string
 }): Promise<void> {
-  const server = options.server ?? DEFAULT_SERVER
+  const server = requireServer(options.server ?? SYNC_SERVER)
   const { connection, key } = await joinVault({ ...options, server })
   await remember(
     {
