@@ -367,6 +367,30 @@ Celular e tablet, só leitura nesta primeira versão.
 - Funciona offline com o que já foi baixado.
 - No tablet, árvore e nota lado a lado.
 
+**Como é feito** (decidido em 2026-11-15, ao começar a etapa 8):
+
+- **Expo, com módulos nativos em Kotlin só onde fazem diferença.** O Matheus considerou
+  um app nativo puro e ficou com o Expo: o sync (pedaços, ids, hash, merge) e o dialeto
+  do Obsidian precisam ser o mesmo código do desktop, e uma segunda implementação seria
+  onde nasce o bug que perde linha. Ficam para módulos nativos: o leitor de PDF dos
+  manuais grandes, o sync em segundo plano e, depois do corte, widgets e o relógio.
+- **Espelho só de leitura** (`packages/sync/src/mirror.ts`). O celular segue o log do
+  servidor mas nunca faz commit, então não tem como apagar ou sobrescrever nada no vault,
+  nem com o armazenamento dele zerado. Guarda o catálogo do vault inteiro; texto (até
+  20 MB), HTML e imagem até 2 MB descem logo, o resto só quando aberto, e fica.
+- **A nota é o editor do desktop em modo leitura**, dentro de um DOM component do Expo
+  (`apps/mobile/src/dom/NoteReader.tsx`), importando `apps/desktop/src/editor` direto.
+  O Metro troca `~/platform` por uma ponte que pede os arquivos ao lado nativo.
+- **libsodium nativa** (`react-native-libsodium`) no lugar da WebAssembly, com os mesmos
+  nomes, então `@markdown-viewer/crypto` roda sem mudar.
+- O estado do espelho está num JSON ao lado do vault, não no SQLite da seção 7. Troca
+  quando a busca local precisar de um índice guardado.
+
+**Entregas da etapa 8:** (1) pareamento, espelho, árvore e leitura de notas e imagens;
+(2) abertura rápida, busca, tags, favoritos, backlinks e sumário; (3) HTML com estado
+sincronizado, PDF nativo, Bases e código; (4) comentários e feedback; (5) layout de
+tablet.
+
 ### 6.9 Feedback do app
 
 > **Desde 2026-10-06 o feedback é o feedback-kit** (`github.com/megomes/feedback-kit`,

@@ -5,3 +5,8 @@ node_modules
 package-lock.json
 apps/desktop/src/ui/feedback.css
 apps/desktop/src/vendor
+
+# Expo: generated native projects and caches
+apps/mobile/android
+apps/mobile/ios
+apps/mobile/.expo

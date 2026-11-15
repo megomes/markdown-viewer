@@ -24,6 +24,13 @@ export function sodium(): Promise<Sodium> {
   return ready
 }
 
+/**
+ * No additional data, written as an empty string rather than null: the phone's
+ * native libsodium refuses null there. For libsodium the two are the same empty
+ * input, so everything sealed before still opens.
+ */
+export const NO_AD = ''
+
 const CONTEXT = 'mdvvault' // 8 bytes, as crypto_kdf requires
 const SUBKEY_SEAL = 1
 const SUBKEY_CHUNK_ID = 2
@@ -61,7 +68,7 @@ export async function wrapKey(key: Uint8Array, secret: string): Promise<WrappedK
     s.crypto_pwhash_ALG_ARGON2ID13,
   )
   const nonce = s.randombytes_buf(s.crypto_aead_xchacha20poly1305_ietf_NPUBBYTES)
-  const cipher = s.crypto_aead_xchacha20poly1305_ietf_encrypt(key, null, null, nonce, kek)
+  const cipher = s.crypto_aead_xchacha20poly1305_ietf_encrypt(key, NO_AD, null, nonce, kek)
   return {
     alg: 'argon2id13+xchacha20poly1305',
     salt: b64(s, salt),
@@ -87,7 +94,7 @@ export async function unwrapKey(wrapped: WrappedKey, secret: string): Promise<Ui
     return s.crypto_aead_xchacha20poly1305_ietf_decrypt(
       null,
       unb64(s, wrapped.cipher),
-      null,
+      NO_AD,
       unb64(s, wrapped.nonce),
       kek,
     )
@@ -143,7 +150,7 @@ export class VaultCrypto {
     const nonce = this.s.randombytes_buf(this.s.crypto_aead_xchacha20poly1305_ietf_NPUBBYTES)
     const cipher = this.s.crypto_aead_xchacha20poly1305_ietf_encrypt(
       plain,
-      null,
+      NO_AD,
       null,
       nonce,
       this.sealKey,
@@ -160,7 +167,7 @@ export class VaultCrypto {
       return this.s.crypto_aead_xchacha20poly1305_ietf_decrypt(
         null,
         sealed.subarray(n),
-        null,
+        NO_AD,
         sealed.subarray(0, n),
         this.sealKey,
       )

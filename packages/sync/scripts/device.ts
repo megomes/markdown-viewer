@@ -1,7 +1,7 @@
 /**
  * Um aparelho de sync na linha de comando, para testar com cópias do vault.
  *
- *   npm run sync:device -- create <pasta> <vault> --name mac --password "..."
+ *   npm run sync:device -- create <pasta> <vault> --name mac --password "..." [--setup-code …]
  *   npm run sync:device -- pair <pasta>                 mostra um código de pareamento
  *   npm run sync:device -- join <pasta> <vault> <código> --name win
  *   npm run sync:device -- sync <pasta>                 uma passada
@@ -83,9 +83,10 @@ async function pass(saved: Saved) {
 
 if (command === 'create') {
   const vault = rest[0]!
-  const setupCode = (
-    await readFile(join(homedir(), '.markdown-viewer', 'sync-setup-code.txt'), 'utf8')
-  ).trim()
+  // --setup-code serves a local server (wrangler dev) with a code of its own.
+  const setupCode =
+    flag('setup-code') ??
+    (await readFile(join(homedir(), '.markdown-viewer', 'sync-setup-code.txt'), 'utf8')).trim()
   const { connection, key, recoveryCode } = await createVault({
     server,
     vault,

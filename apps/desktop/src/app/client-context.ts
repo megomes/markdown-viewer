@@ -6,4 +6,4 @@
  */
 
 /** The stage of docs/spec.md being built, recorded with every note. */
-export const STAGE = 'etapa-7'
+export const STAGE = 'etapa-8'

@@ -1,6 +1,8 @@
 import { describe, expect, it } from 'vitest'
 import {
   createVaultKey,
+  NO_AD,
+  sodium,
   generateRecoveryCode,
   normalizeRecoveryCode,
   unwrapKey,
@@ -56,5 +58,19 @@ describe('conteúdo', () => {
     const crypto = await VaultCrypto.create(await createVaultKey())
     const meta = { path: 'Notas/Painel.md', size: 10 }
     expect(crypto.openJson(crypto.sealJson(meta))).toEqual(meta)
+  })
+
+  it('o que foi selado com dado adicional nulo abre com o vazio, e vice-versa', async () => {
+    // O celular só aceita '' ali; tudo que o desktop selou antes, com null, tem de abrir.
+    const s = await sodium()
+    const key = s.crypto_aead_xchacha20poly1305_ietf_keygen()
+    const nonce = s.randombytes_buf(s.crypto_aead_xchacha20poly1305_ietf_NPUBBYTES)
+    const plain = new Uint8Array([1, 2, 3])
+    const old = s.crypto_aead_xchacha20poly1305_ietf_encrypt(plain, null, null, nonce, key)
+    const now = s.crypto_aead_xchacha20poly1305_ietf_encrypt(plain, NO_AD, null, nonce, key)
+    expect(now).toEqual(old)
+    expect(s.crypto_aead_xchacha20poly1305_ietf_decrypt(null, old, NO_AD, nonce, key)).toEqual(
+      plain,
+    )
   })
 })

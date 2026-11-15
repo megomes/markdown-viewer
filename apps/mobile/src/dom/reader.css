@@ -1,0 +1,22 @@
+/* The reader fills the web view and scrolls inside it, like the desktop's editor pane. */
+html,
+body,
+#root {
+  height: 100%;
+  margin: 0;
+  background: var(--bg-app);
+}
+
+.reader {
+  height: 100%;
+}
+
+.reader .cm-editor {
+  height: 100%;
+}
+
+/* A phone is narrow: the page measure gives way to small side margins. */
+.reader .cm-content {
+  padding: 12px 18px 48px;
+  max-width: none;
+}

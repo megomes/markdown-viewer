@@ -13,6 +13,10 @@ export interface LineSpan {
 }
 
 export function activeLines(state: EditorState): LineSpan[] {
+  // Read-only text has no cursor to reveal Markdown for. Without this, the
+  // phone's reader opened with the selection at the start and showed the
+  // frontmatter raw, and a tap anywhere showed that line's syntax.
+  if (state.readOnly) return []
   const spans: LineSpan[] = []
   for (const range of state.selection.ranges) {
     const first = state.doc.lineAt(range.from)

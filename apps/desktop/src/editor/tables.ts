@@ -13,6 +13,8 @@ import { StateEffect, StateField, type EditorState, type Range } from '@codemirr
 import { Decoration, EditorView, WidgetType, type DecorationSet } from '@codemirror/view'
 import { activeLines, overlaps } from './active'
 import { renderInline } from './inline'
+import { documentSource } from './images'
+import { openTarget, resolveLink, splitLink } from './links'
 import { closeMenu, openMenu, type MenuEntry } from './menu'
 import {
   insertColumn,
@@ -151,12 +153,14 @@ class TableWidget extends WidgetType {
   constructor(
     private readonly text: string,
     private readonly from: number,
+    /** Read-only (the phone's reader): drawn, never edited. */
+    private readonly readOnly: boolean,
   ) {
     super()
   }
 
   eq(other: TableWidget): boolean {
-    return other.from === this.from && other.text === this.text
+    return other.from === this.from && other.text === this.text && other.readOnly === this.readOnly
   }
 
   toDOM(view: EditorView): HTMLElement {
@@ -283,6 +287,26 @@ class TableWidget extends WidgetType {
 
       /** Out of the cell: the Markdown is drawn, not shown. */
       const show = () => field.replaceChildren(renderInline(cellOf(row, column)))
+
+      if (this.readOnly) {
+        field.contentEditable = 'false'
+        show()
+        // A wiki link in a cell is drawn without its target, so the tap finds
+        // it by order among the links written in the cell.
+        field.addEventListener('click', (event) => {
+          const link = (event.target as HTMLElement).closest('.wikilink')
+          if (!link) return
+          const index = [...field.querySelectorAll('.wikilink')].indexOf(link)
+          const inner = [...cellOf(row, column).matchAll(/!?\[\[([^\]]+)\]\]/g)][index]?.[1]
+          const source = view.state.facet(documentSource)
+          if (!inner || !source) return
+          const { target, subpath } = splitLink(inner)
+          const path = resolveLink(source.baseId, target, source.path)
+          if (path) openTarget({ baseId: source.baseId, path, subpath })
+        })
+        element.append(field)
+        return element
+      }
       /** In the cell: the Markdown itself, which is what gets edited. */
       const edit = () => {
         field.textContent = cellOf(row, column)
@@ -409,11 +433,12 @@ class TableWidget extends WidgetType {
     const headRow = document.createElement('tr')
     model.header.forEach((_, column) => {
       const cell = makeCell(-1, column)
+      headRow.append(cell)
+      if (this.readOnly) return
       const bar = handle('col', () => columnMenu(column))
       colHandles[column] = bar
       cell.append(bar)
       trackPointer(cell, -1, column)
-      headRow.append(cell)
     })
     thead.append(headRow)
     table.append(thead)
@@ -423,17 +448,20 @@ class TableWidget extends WidgetType {
       const tr = document.createElement('tr')
       for (let column = 0; column < width; column++) {
         const cell = makeCell(row, column)
+        tr.append(cell)
+        if (this.readOnly) continue
         if (column === 0) {
           const bar = handle('row', () => rowMenu(row))
           rowHandles[row] = bar
           cell.append(bar)
         }
         trackPointer(cell, row, column)
-        tr.append(cell)
       }
       tbody.append(tr)
     })
     table.append(tbody)
+
+    if (this.readOnly) return wrapper
 
     // ---- the whole table, on the right button -----------------------------
     wrapper.addEventListener('contextmenu', (event) => {
@@ -484,7 +512,11 @@ function draw(state: EditorState, tables: Span[]): DecorationSet {
     decorations.push(
       Decoration.replace({
         block: true,
-        widget: new TableWidget(state.doc.sliceString(table.from, table.to), table.from),
+        widget: new TableWidget(
+          state.doc.sliceString(table.from, table.to),
+          table.from,
+          state.readOnly,
+        ),
       }).range(table.from, table.to),
     )
   }
