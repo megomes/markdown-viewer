@@ -82,7 +82,8 @@ const TEXT =
   /\.(md|markdown|txt|html?|css|js|mjs|ts|json|ya?ml|csv|tsv|xml|svg|py|lua|sh|ps1|bat|ini|toml|log|base|canvas)$/i
 const STATE_FILE = /^\.markdown-viewer\/state\/.+\.json$/
 
-function isText(path: string): boolean {
+/** Text files merge line by line; everything else is kept whole. */
+export function isText(path: string): boolean {
   return TEXT.test(path)
 }
 

@@ -13,6 +13,7 @@
   },
   "dependencies": {
     "@markdown-viewer/crypto": "*",
+    "@noble/hashes": "^2.4.0",
     "node-diff3": "^3.2.1"
   },
   "devDependencies": {

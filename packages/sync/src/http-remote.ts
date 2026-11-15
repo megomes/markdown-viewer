@@ -11,6 +11,8 @@ import {
   wrapKey,
   type WrappedKey,
 } from '@markdown-viewer/crypto/vault-crypto'
+import { sha256 } from '@noble/hashes/sha2.js'
+import { bytesToHex } from '@noble/hashes/utils.js'
 import type { Commit, CommitResult, Remote, RemoteEntry } from './protocol'
 
 /** The sync server (services/sync) has no default: each caller passes the one it deployed. */
@@ -212,9 +214,9 @@ export function normalizePairingCode(code: string): string {
   return code.toUpperCase().replace(/[^A-Z0-9]/g, '')
 }
 
+/** In plain JavaScript: the phone's engine (Hermes) has no `crypto.subtle`. */
 async function sha256Hex(text: string): Promise<string> {
-  const digest = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(text))
-  return [...new Uint8Array(digest)].map((b) => b.toString(16).padStart(2, '0')).join('')
+  return bytesToHex(sha256(new TextEncoder().encode(text)))
 }
 
 /**
