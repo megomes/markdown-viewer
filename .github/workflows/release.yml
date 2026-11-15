@@ -134,4 +134,7 @@ jobs:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         # Only now does `releases/latest/download/latest.json` start answering,
         # and by now every file it names is in place.
-        run: gh release edit "$GITHUB_REF_NAME" --draft=false --repo "$GITHUB_REPOSITORY"
+        #
+        # Marked latest by name: the phone's releases (android-release.yml) live
+        # in the same repository and must never take that place.
+        run: gh release edit "$GITHUB_REF_NAME" --draft=false --latest --repo "$GITHUB_REPOSITORY"

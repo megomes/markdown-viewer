@@ -383,6 +383,8 @@ Celular e tablet, só leitura nesta primeira versão.
   O Metro troca `~/platform` por uma ponte que pede os arquivos ao lado nativo.
 - **libsodium nativa** (`react-native-libsodium`) no lugar da WebAssembly, com os mesmos
   nomes, então `@markdown-viewer/crypto` roda sem mudar.
+- **Atualização pelo próprio app** (OTA), pelas releases do GitHub, como no runbook do
+  vault. Detalhes em `docs/releases.md`, seção "O app Android".
 - O estado do espelho está num JSON ao lado do vault, não no SQLite da seção 7. Troca
   quando a busca local precisar de um índice guardado.
 

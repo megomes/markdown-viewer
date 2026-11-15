@@ -101,3 +101,36 @@ próprio app, que não passa pelo navegador. Matheus confere isso na primeira
 release e escreve aqui o que aconteceu. A assinatura descrita neste documento é
 a do Tauri, que é a que o app confere antes de instalar, e ela não substitui a
 da Apple.
+
+## O app Android
+
+A mesma tag `v0.X.Y` também solta o APK do celular, pelo workflow
+`.github/workflows/android-release.yml`. É o modelo do runbook "Update OTA de app Android
+pelo GitHub Releases", no vault, com três diferenças:
+
+- **Sem token.** O repositório é público, então o app lê as releases sem autenticação.
+  Um token dentro de um APK que qualquer um baixa seria de qualquer um.
+- **Releases separadas da do desktop.** A do celular sai como `android-v0.X.Y-<run>`, com o
+  asset `markdown-viewer-<run>.apk`, e nunca é marcada como latest: o atualizador do
+  desktop lê `releases/latest`. O passo que publica o desktop marca a dele como latest de
+  propósito.
+- **Sai pela tag, não a cada push.** Para soltar um APK sem versão nova, há o botão Run
+  workflow em Actions > Release Android.
+
+O `versionCode` é o número da execução do workflow, então cresce sozinho e nunca repete.
+A tag tem que bater com `version` em `apps/mobile/app.json`, além do `tauri.conf.json`.
+
+**Assinatura.** A keystore é a compartilhada por todos os apps Android do Matheus
+(`~/.android/daily-motion-release.jks`, alias `dailymotion`), nos secrets `KEYSTORE_B64` e
+`KEYSTORE_PASSWORD`. O plugin `apps/mobile/plugins/with-release-signing.js` lê do ambiente
+no CI e de `apps/mobile/android/local.properties` (`release.keystore`,
+`release.passwordFile`) no computador.
+
+**No celular.** O app procura versão nova ao abrir e mostra um aviso no topo do vault;
+em Ajustes há "Buscar atualização". Atualizar baixa o APK e abre o instalador do Android
+(um toque). Na primeira vez, o Android pede para liberar "Instalar apps desconhecidos"
+para o app.
+
+**A primeira instalação** é à mão: baixar o `.apk` da release no próprio celular, ou
+`adb install`. Um APK de desenvolvimento (`expo run:android`) é assinado com a chave de
+debug e não aceita update por cima: desinstale antes de instalar o da release.

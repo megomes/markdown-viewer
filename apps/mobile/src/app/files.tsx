@@ -4,9 +4,10 @@
  */
 
 import { useMemo } from 'react'
-import { Alert, FlatList, Pressable, RefreshControl, StyleSheet, Text, View } from 'react-native'
+import { FlatList, Pressable, RefreshControl, StyleSheet, Text, View } from 'react-native'
 import { router, Stack, useLocalSearchParams } from 'expo-router'
-import { childrenOf, syncNow, unpair, useVault, type TreeNode } from '../vault/runtime'
+import { childrenOf, syncNow, useVault, type TreeNode } from '../vault/runtime'
+import { useUpdates } from '../updates/updater'
 import { colors } from '../ui/theme'
 
 function sizeLabel(bytes: number): string {
@@ -23,6 +24,7 @@ function timeLabel(at: number): string {
 export default function Files() {
   const { folder = '' } = useLocalSearchParams<{ folder?: string }>()
   const vault = useVault()
+  const updates = useUpdates()
   const nodes = useMemo(() => childrenOf(vault.files, folder), [vault.files, folder])
   const title = folder ? folder.slice(folder.lastIndexOf('/') + 1) : 'Vault'
 
@@ -35,20 +37,6 @@ export default function Files() {
       : vault.lastSync
         ? `Atualizado às ${timeLabel(vault.lastSync)}`
         : ''
-
-  const confirmUnpair = () =>
-    Alert.alert(
-      'Desparear este aparelho?',
-      'A cópia do vault neste aparelho é apagada. O vault e os outros aparelhos não mudam.',
-      [
-        { text: 'Cancelar', style: 'cancel' },
-        {
-          text: 'Desparear',
-          style: 'destructive',
-          onPress: () => void unpair().then(() => router.replace('/pair')),
-        },
-      ],
-    )
 
   const open = (node: TreeNode) => {
     if (node.kind === 'directory')
@@ -64,13 +52,20 @@ export default function Files() {
           headerRight: folder
             ? undefined
             : () => (
-                <Pressable onPress={confirmUnpair} hitSlop={12}>
-                  <Text style={styles.headerAction}>{vault.deviceName ?? 'Aparelho'}</Text>
+                <Pressable onPress={() => router.push('/settings')} hitSlop={12}>
+                  <Text style={styles.headerAction}>Ajustes</Text>
                 </Pressable>
               ),
         }}
       />
       {status ? <Text style={styles.status}>{status}</Text> : null}
+      {!folder && updates.update ? (
+        <Pressable style={styles.update} onPress={() => router.push('/settings')}>
+          <Text style={styles.updateText}>
+            Versão {updates.update.label} disponível. Toque para atualizar.
+          </Text>
+        </Pressable>
+      ) : null}
       <FlatList
         data={nodes}
         keyExtractor={(node) => node.path}
@@ -119,6 +114,16 @@ const styles = StyleSheet.create({
     paddingBottom: 8,
   },
   headerAction: { color: colors.textSecondary, fontSize: 14 },
+  update: {
+    marginHorizontal: 20,
+    marginBottom: 10,
+    padding: 12,
+    borderRadius: 10,
+    backgroundColor: colors.surface2,
+    borderWidth: 1,
+    borderColor: colors.borderDefault,
+  },
+  updateText: { color: colors.textPrimary, fontSize: 14 },
   row: {
     flexDirection: 'row',
     alignItems: 'center',

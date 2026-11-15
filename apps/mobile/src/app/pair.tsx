@@ -16,7 +16,7 @@ import {
   View,
 } from 'react-native'
 import { CameraView, useCameraPermissions } from 'expo-camera'
-import { router } from 'expo-router'
+import { router, Stack } from 'expo-router'
 import { defaultDeviceName, parsePairingQr, type PairingCode } from '../vault/pairing'
 import { pairWith } from '../vault/runtime'
 import { colors, radius } from '../ui/theme'
@@ -57,6 +57,16 @@ export default function Pair() {
 
   return (
     <KeyboardAvoidingView style={styles.screen} behavior="padding">
+      {/* Ajustes before pairing too: an update may be what fixes a pairing that fails. */}
+      <Stack.Screen
+        options={{
+          headerRight: () => (
+            <Pressable onPress={() => router.push('/settings')} hitSlop={12}>
+              <Text style={styles.headerAction}>Ajustes</Text>
+            </Pressable>
+          ),
+        }}
+      />
       <ScrollView contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled">
         <Text style={styles.lead}>
           No desktop, abra Sync e toque em Parear aparelho. Aponte a câmera para o QR que aparecer.
@@ -150,6 +160,7 @@ export default function Pair() {
 const styles = StyleSheet.create({
   screen: { flex: 1, backgroundColor: colors.bgApp },
   content: { padding: 20, gap: 10 },
+  headerAction: { color: colors.textSecondary, fontSize: 14 },
   lead: { color: colors.textSecondary, fontSize: 15, lineHeight: 22, marginBottom: 6 },
   cameraBox: {
     aspectRatio: 1,

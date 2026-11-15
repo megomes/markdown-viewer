@@ -2,7 +2,7 @@
   "expo": {
     "name": "markdown-viewer",
     "slug": "markdown-viewer",
-    "version": "0.8.0",
+    "version": "0.9.0",
     "scheme": "markdown-viewer",
     "orientation": "default",
     "icon": "./assets/icon.png",
@@ -14,7 +14,8 @@
         "backgroundColor": "#050508",
         "foregroundImage": "./assets/icon.png"
       },
-      "predictiveBackGestureEnabled": false
+      "predictiveBackGestureEnabled": false,
+      "permissions": ["android.permission.REQUEST_INSTALL_PACKAGES"]
     },
     "plugins": [
       "expo-router",
@@ -26,10 +27,18 @@
           "cameraPermission": "A câmera lê o QR de pareamento mostrado pelo desktop.",
           "recordAudioAndroid": false
         }
-      ]
+      ],
+      "./plugins/with-release-signing"
     ],
     "experiments": {
       "typedRoutes": false
+    },
+    "extra": {
+      "ota": {
+        "repo": "megomes/markdown-viewer",
+        "tagPrefix": "android-v",
+        "asset": "markdown-viewer-(\\d+)\\.apk"
+      }
     }
   }
 }
