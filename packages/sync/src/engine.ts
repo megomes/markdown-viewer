@@ -90,7 +90,7 @@ export function isText(path: string): boolean {
 const decoder = new TextDecoder('utf-8', { fatal: false })
 const encoder = new TextEncoder()
 
-function randomId(): string {
+export function randomId(): string {
   const bytes = new Uint8Array(16)
   crypto.getRandomValues(bytes)
   return [...bytes].map((b) => b.toString(16).padStart(2, '0')).join('')

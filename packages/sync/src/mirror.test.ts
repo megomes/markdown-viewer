@@ -3,7 +3,7 @@ import { createVaultKey, VaultCrypto } from '@markdown-viewer/crypto/vault-crypt
 import { SyncEngine } from './engine'
 import { MemoryServer } from './memory-remote'
 import { MemoryFiles, MemoryStore } from './memory-files'
-import { downloadsEagerly, MemoryMirrorStore, ReadOnlyMirror } from './mirror'
+import { downloadsEagerly, MemoryMirrorStore, VaultMirror } from './mirror'
 
 async function setup() {
   const server = new MemoryServer()
@@ -18,13 +18,13 @@ async function setup() {
   })
   const phone = new MemoryFiles()
   const store = new MemoryMirrorStore()
-  const mirror = new ReadOnlyMirror({ files: phone, store, remote: server.remote('s25'), crypto })
+  const mirror = new VaultMirror({ files: phone, store, remote: server.remote('s25'), crypto })
   return { server, desktop, engine, phone, store, mirror, crypto }
 }
 
 const bytes = (size: number) => new Uint8Array(size).fill(7)
 
-describe('ReadOnlyMirror', () => {
+describe('VaultMirror', () => {
   it('baixa notas e imagens pequenas e só lista os PDFs', async () => {
     const { desktop, engine, phone, mirror } = await setup()
     await desktop.setText('Notas/a.md', '# A')
@@ -113,12 +113,12 @@ describe('ReadOnlyMirror', () => {
     const { desktop, engine, store, server, phone, crypto } = await setup()
     await desktop.setText('a.md', 'um')
     await engine.syncUntilQuiet()
-    const first = new ReadOnlyMirror({ files: phone, store, remote: server.remote('s25'), crypto })
+    const first = new VaultMirror({ files: phone, store, remote: server.remote('s25'), crypto })
     await first.sync()
 
     await desktop.setText('b.md', 'dois')
     await engine.syncUntilQuiet()
-    const again = new ReadOnlyMirror({ files: phone, store, remote: server.remote('s25'), crypto })
+    const again = new VaultMirror({ files: phone, store, remote: server.remote('s25'), crypto })
     const report = await again.sync()
     expect(report.paths).toEqual(['b.md'])
   })
