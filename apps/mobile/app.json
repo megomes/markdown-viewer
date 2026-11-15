@@ -11,8 +11,8 @@
     "android": {
       "package": "ai.artell.markdownviewer",
       "adaptiveIcon": {
-        "backgroundColor": "#050508",
-        "foregroundImage": "./assets/icon.png"
+        "backgroundColor": "#07061c",
+        "foregroundImage": "./assets/adaptive-icon.png"
       },
       "predictiveBackGestureEnabled": false,
       "permissions": ["android.permission.REQUEST_INSTALL_PACKAGES"]
