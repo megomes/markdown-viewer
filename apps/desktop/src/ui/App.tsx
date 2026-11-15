@@ -22,7 +22,13 @@ import { onTrayNewNote } from '~/platform/tray'
 import { DEFAULTS, LIMITS, useSettings } from '~/app/settings'
 import { pathIn, tabViewer, useWorkspace, type Doc, type RenameTarget, type Tab } from '~/app/store'
 import { Viewer } from './viewers/Viewer'
-import { entryId, nativeBaseName, parentPath, type Entry } from '@markdown-viewer/core/fs'
+import {
+  entryId,
+  nativeBaseName,
+  parentPath,
+  type Base,
+  type Entry,
+} from '@markdown-viewer/core/fs'
 import type { Heading } from '~/editor/outline'
 import { EditorView, type Command } from '@codemirror/view'
 import { redo, undo } from '@codemirror/commands'
@@ -601,12 +607,35 @@ export function App() {
   }
   // Something opened in another space (a file from the system, a link to a
   // folder) brings that space forward.
+  //
+  // Not while the session is coming back: the restore opens the old tabs one by
+  // one, each in front for a moment, and the first vault tab used to pull the
+  // app back to the vault from a folder that was open with nothing in it
+  // (note #14). Once it is done, the space remembered wins, unless the system
+  // handed over a file in the meantime (note #9).
+  const [hadSession] = useState(() => loadSession() !== null)
+  const settled = useRef(false)
   useEffect(() => {
+    if (hadSession && !state.restored) return
+    if (!settled.current) {
+      settled.current = true
+      const asked = state.tabs.find((tab) => tab.id === state.askedOnRestore)
+      if (asked) {
+        rememberSpace(spaceOfTab(asked, vault))
+        return
+      }
+      if (spaces.some((one) => one.id === activeSpace)) {
+        if (activeTab && spaceOfTab(activeTab, vault) === activeSpace) return
+        const there = state.tabs.filter((tab) => spaceOfTab(tab, vault) === activeSpace)
+        actions.activateTab(there[there.length - 1]?.id ?? null)
+        return
+      }
+    }
     if (!activeTab) return
     const id = spaceOfTab(activeTab, vault)
     if (id !== space.id) rememberSpace(id)
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [state.activeId, vault])
+  }, [state.activeId, vault, state.restored])
   const switchSpace = (id: SpaceId) => {
     if (id === space.id) return
     lastActive.current[space.id] = state.activeId
@@ -620,6 +649,22 @@ export function App() {
   useEffect(() => {
     spaceRef.current = { id: space.id, vault, baseId: space.baseId }
   })
+
+  /**
+   * A folder just opened, from the "+", the menu, Ctrl+O or the recents, is
+   * where the person wants to be: its space comes forward (note #14). Before,
+   * the folder joined the strip and the app stayed where it was, which looked
+   * like it had gone back to the vault.
+   */
+  const latestSwitch = useRef(switchSpace)
+  useEffect(() => {
+    latestSwitch.current = switchSpace
+  })
+  const openFolder = useCallback(async (opening: Promise<Base | null>) => {
+    const base = await opening
+    if (!base) return
+    latestSwitch.current(base.id === spaceRef.current.vault ? 'vault' : `folder:${base.id}`)
+  }, [])
 
   /**
    * "Nova nota", as in Obsidian: inside a folder there is no draft and no
@@ -989,7 +1034,11 @@ export function App() {
   const POLL = 4000
   const openBases = state.bases.map((base) => base.id).join(',')
   useEffect(() => {
-    const check = () => void actions.checkExternalChanges()
+    const check = () => {
+      void actions.checkExternalChanges()
+      // New, deleted and renamed files show up in the tree (note #15).
+      void actions.refreshTree()
+    }
     // Read so the watchers are set up again whenever a folder is opened.
     const stop = openBases === '' ? () => {} : actions.watchBases(check)
     const timer = window.setInterval(() => {
@@ -1213,7 +1262,7 @@ export function App() {
             void newNote()
             break
           case 'openBase':
-            void actions.openBase()
+            void openFolder(actions.openBase())
             break
           case 'openFile':
             void actions.openLooseFile()
@@ -1316,6 +1365,7 @@ export function App() {
       documentMenu,
       newNote,
       once,
+      openFolder,
       reopenTab,
       settings.dock,
       settings.infoPanel,
@@ -1427,7 +1477,7 @@ export function App() {
               x: box.left,
               y: box.bottom + 4,
               items: [
-                { label: 'Abrir pasta…', onSelect: () => void actions.openBase() },
+                { label: 'Abrir pasta…', onSelect: () => void openFolder(actions.openBase()) },
                 { label: 'Abrir arquivo…', onSelect: () => void actions.openLooseFile() },
               ],
             })
@@ -1443,7 +1493,11 @@ export function App() {
               <FilePlusIcon />
               Nova nota
             </button>
-            <button type="button" className="nav-action" onClick={() => void actions.openBase()}>
+            <button
+              type="button"
+              className="nav-action"
+              onClick={() => void openFolder(actions.openBase())}
+            >
               <FolderPlusIcon />
               Abrir pasta
             </button>
@@ -1624,7 +1678,7 @@ export function App() {
             open={settings.recentsOpen}
             onToggle={() => update('recentsOpen', !settings.recentsOpen)}
             onOpenFile={(file) => void actions.openRecentFile(file)}
-            onOpenBase={(base) => void actions.openRecentBase(base)}
+            onOpenBase={(base) => void openFolder(actions.openRecentBase(base))}
             onForgetFile={(file) => actions.forgetRecentFile(file.baseId, file.path)}
             onForgetBase={(base) => actions.forgetRecentBase(base.id)}
             onClear={actions.forgetRecents}
@@ -1901,7 +1955,9 @@ export function App() {
             hasBase={!!space.baseId || space.kind === 'files'}
             vaultMissing={space.kind === 'vault' && !space.baseId}
             onOpenBase={() =>
-              void (space.kind === 'vault' && !space.baseId ? chooseVault() : actions.openBase())
+              void (space.kind === 'vault' && !space.baseId
+                ? chooseVault()
+                : openFolder(actions.openBase()))
             }
             onOpenFile={() => void actions.openLooseFile()}
             onNewNote={() => void newNote()}

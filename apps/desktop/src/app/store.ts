@@ -118,6 +118,11 @@ export interface State {
   pending: string[]
   /** False until the attempt to reopen last session has finished. */
   restored: boolean
+  /**
+   * The tab of a file the system handed over while the session was coming back
+   * (note #9). Its space is the one to show, not the one remembered.
+   */
+  askedOnRestore: string | null
 }
 
 type Action =
@@ -139,7 +144,7 @@ type Action =
   | { type: 'doc/vanished'; id: string }
   | { type: 'filter/set'; value: string }
   | { type: 'error/set'; message: string | null }
-  | { type: 'session/restored'; pending: string[] }
+  | { type: 'session/restored'; pending: string[]; asked: string | null }
   | { type: 'folder/expanded'; id: string }
   | { type: 'entry/moved'; baseId: string; from: string; to: string }
   | { type: 'loose/moved'; from: string; to: string }
@@ -161,6 +166,7 @@ const initialState: State = {
   index: {},
   pending: [],
   restored: false,
+  askedOnRestore: null,
 }
 
 export function reducer(state: State, action: Action): State {
@@ -362,7 +368,7 @@ export function reducer(state: State, action: Action): State {
       return { ...state, error: action.message }
 
     case 'session/restored':
-      return { ...state, restored: true, pending: action.pending }
+      return { ...state, restored: true, pending: action.pending, askedOnRestore: action.asked }
 
     case 'index/progress':
       return { ...state, index: { ...state.index, [action.baseId]: action.index } }
@@ -975,20 +981,24 @@ export function useWorkspace() {
     [report],
   )
 
+  /** Resolves to the folder, already open or opened now; null when it could not be. */
   const openRecentBase = useCallback(
-    async (base: RecentBase) => {
+    async (base: RecentBase): Promise<Base | null> => {
       try {
-        if (latest.current.bases.some((open) => open.id === base.id)) return
+        const open = latest.current.bases.find((one) => one.id === base.id)
+        if (open) return open
         const result = await fileSystem().restoreBase(base.id, true)
         if (result.status !== 'ok') {
           report(new Error('Essa pasta não está mais acessível.'))
-          return
+          return null
         }
         dispatch({ type: 'recents/set', recents: rememberBase(result.value) })
         dispatch({ type: 'base/added', base: result.value })
         await loadChildren(base.id, '')
+        return result.value
       } catch (error) {
         report(error)
+        return null
       }
     },
     [loadChildren, report],
@@ -1044,6 +1054,43 @@ export function useWorkspace() {
       indexing.current.delete(baseId)
     }
   }, [])
+
+  /**
+   * Reads again every folder the tree has already read, and keeps what changed.
+   *
+   * Files created, deleted or renamed by something else (the Claude Code, the
+   * file manager, the sync) used to stay out of the tree until the app was
+   * opened again, because only the open tabs were checked (note #15). A folder
+   * that changed also has its base indexed again, so quick open, search and
+   * links see the new files too.
+   */
+  const refreshing = useRef(false)
+  const refreshTree = useCallback(async () => {
+    if (refreshing.current) return
+    refreshing.current = true
+    try {
+      const changed = new Set<string>()
+      for (const base of latest.current.bases) {
+        for (const id of Object.keys(latest.current.children)) {
+          const path = pathIn(id, base.id)
+          if (path === null) continue
+          let entries: Entry[]
+          try {
+            entries = await fileSystem().list(base.id, path)
+          } catch {
+            // A folder that went away disappears from its parent's listing.
+            continue
+          }
+          if (sameEntries(latest.current.children[id], entries)) continue
+          dispatch({ type: 'children/loaded', id, entries })
+          changed.add(base.id)
+        }
+      }
+      for (const baseId of changed) void indexBase(baseId)
+    } finally {
+      refreshing.current = false
+    }
+  }, [indexBase])
 
   /**
    * After a rename or a move, every note that pointed at what moved points at
@@ -1239,8 +1286,9 @@ export function useWorkspace() {
         }
       }
 
-      const asked = chosen.current
-      if (asked && latest.current.tabs.some((tab) => tab.id === asked)) {
+      const chose = chosen.current
+      const asked = chose && latest.current.tabs.some((tab) => tab.id === chose) ? chose : null
+      if (asked) {
         dispatch({ type: 'tab/activated', id: asked })
       } else if (
         session.activeId &&
@@ -1253,7 +1301,7 @@ export function useWorkspace() {
       chosen.current = null
       restoring.current = false
 
-      dispatch({ type: 'session/restored', pending })
+      dispatch({ type: 'session/restored', pending, asked })
     },
     [loadChildren],
   )
@@ -1276,6 +1324,7 @@ export function useWorkspace() {
       forgetRecentFile,
       forgetRecentBase,
       restoreSession,
+      refreshTree,
       createEntry,
       renameEntry,
       moveEntry,
@@ -1329,6 +1378,7 @@ export function useWorkspace() {
       openRecentBase,
       closeBase,
       openRecentFile,
+      refreshTree,
       reload,
       restoreSession,
       save,
@@ -1337,6 +1387,18 @@ export function useWorkspace() {
   )
 
   return { state, actions }
+}
+
+/**
+ * Whether a folder read again shows the same entries, so an unchanged tree is
+ * not rendered again on every check.
+ */
+export function sameEntries(
+  before: readonly Entry[] | undefined,
+  after: readonly Entry[],
+): boolean {
+  if (!before || before.length !== after.length) return false
+  return before.every((entry, i) => entry.id === after[i]!.id && entry.kind === after[i]!.kind)
 }
 
 /**
