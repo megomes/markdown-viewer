@@ -252,6 +252,7 @@ export async function renewRecoveryCode(conn: Connection, key: Uint8Array): Prom
     if (error instanceof HttpError && error.status === 404)
       throw new Error(
         'O servidor de sync ainda é de uma versão anterior e não troca o código de recuperação. Nada mudou: o código antigo e a senha continuam valendo.',
+        { cause: error },
       )
     throw error
   }

@@ -62,7 +62,8 @@ export function noteSnippet(text: string, limit = 220): string {
   let size = 0
   for (const raw of body.split('\n')) {
     let line = raw.trim()
-    if (!line || /^!\[/.test(line) || /^```/.test(line) || /^[-*_]{3,}$/.test(line)) continue
+    if (!line || line.startsWith('![') || line.startsWith('```') || /^[-*_]{3,}$/.test(line))
+      continue
     line = line
       .replace(/^#{1,6}\s+/, '')
       .replace(/^>\s?(\[![^\]]*\][+-]?\s*)?/, '')
