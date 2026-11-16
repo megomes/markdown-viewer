@@ -245,7 +245,16 @@ export async function renewRecoveryCode(conn: Connection, key: Uint8Array): Prom
   // Never sent before it is seen to open the same key it was made from.
   if (!sameBytes(await unwrapKey(recovery, code), key))
     throw new Error('O código novo não abriu a chave. Nada foi trocado.')
-  await call(conn, 'keys/recovery', { method: 'PUT', body: JSON.stringify(recovery) })
+  try {
+    await call(conn, 'keys/recovery', { method: 'PUT', body: JSON.stringify(recovery) })
+  } catch (error) {
+    // A server older than this app answers that it does not know the route.
+    if (error instanceof HttpError && error.status === 404)
+      throw new Error(
+        'O servidor de sync ainda é de uma versão anterior e não troca o código de recuperação. Nada mudou: o código antigo e a senha continuam valendo.',
+      )
+    throw error
+  }
   if (!(await opensVault(conn, key, 'recovery', code)))
     throw new Error('O servidor não confirmou o código novo. Gere outro.')
   return code
