@@ -353,9 +353,10 @@ tudo", aplica e marca cada item como aplicado, com uma nota curta quando não co
 ou decidiu diferente. A conferência continua sendo do Matheus. A nota do Claude é um
 campo novo, opcional, a propor no formato do Revisor.
 
-### 6.8 App Android de leitura
+### 6.8 App Android
 
-Celular e tablet, só leitura nesta primeira versão.
+Celular e tablet. Nasceu só de leitura; desde 2026-11-15 também edita e cria notas (ver
+"Edição no celular" abaixo).
 
 - Parear com o vault por QR.
 - Árvore de arquivos, abertura rápida por nome, busca local, tags, favoritos, backlinks,
@@ -374,12 +375,31 @@ Celular e tablet, só leitura nesta primeira versão.
   do Obsidian precisam ser o mesmo código do desktop, e uma segunda implementação seria
   onde nasce o bug que perde linha. Ficam para módulos nativos: o leitor de PDF dos
   manuais grandes, o sync em segundo plano e, depois do corte, widgets e o relógio.
-- **Espelho só de leitura** (`packages/sync/src/mirror.ts`). O celular segue o log do
-  servidor mas nunca faz commit, então não tem como apagar ou sobrescrever nada no vault,
-  nem com o armazenamento dele zerado. Guarda o catálogo do vault inteiro; texto (até
-  20 MB), HTML e imagem até 2 MB descem logo, o resto só quando aberto, e fica.
-- **A nota é o editor do desktop em modo leitura**, dentro de um DOM component do Expo
-  (`apps/mobile/src/dom/NoteReader.tsx`), importando `apps/desktop/src/editor` direto.
+- **Espelho que só grava o que foi pedido** (`packages/sync/src/mirror.ts`). O celular
+  segue o log do servidor e guarda o catálogo do vault inteiro; texto (até 20 MB), HTML
+  e imagem até 2 MB descem logo, o resto só quando aberto, e fica. Ele nunca deduz
+  mudança olhando a pasta, como faz o motor do desktop: um arquivo que não está no
+  aparelho é o caso normal, e armazenamento zerado não pode virar exclusão no vault. Os
+  únicos commits são os que a pessoa pediu (editar, criar, renomear, mover, apagar), e
+  ficam guardados no estado até o servidor aceitar.
+- **Edição no celular** (decidido em 2026-11-15, a pedido do Matheus; antes o app era só
+  de leitura). A nota abre para ler e o botão Editar liga a mesma prévia ao vivo do
+  desktop, com uma barra de Markdown acima do teclado (título, lista, tarefa, `[[ ]]`,
+  negrito, itálico, foto, imagem, desfazer). O texto salva sozinho. Sem rede, a edição
+  fica no aparelho e sobe quando a rede volta. Conflito segue a regra dos computadores:
+  texto junta linha a linha; quando as duas pontas mexeram na mesma linha, a versão do
+  servidor fica no lugar e a do celular vira `Nota (conflito S25 data).md` ao lado.
+  Apagado aqui e editado lá, ou o contrário: a edição vence. Foto e imagem vão para a
+  pasta `Files`. Renomear e mover atualizam os links, como no desktop. Pasta vazia
+  criada no celular só existe nele até receber uma nota (o servidor conhece arquivos,
+  não pastas).
+- **A tela guarda o id do arquivo, nunca o caminho.** O id é o que o servidor deu ao
+  arquivo e não muda quando ele é renomeado ou movido, aqui ou em outro aparelho. Então
+  renomear é só um título novo: o editor, o cursor e o teclado ficam onde estão. O texto
+  que o próprio editor salvou não volta para ele (o app sabe qual versão escreveu); só
+  versão vinda de fora entra, e entra como a menor troca possível, sem mover o cursor.
+- **A nota é o editor do desktop**, dentro de um DOM component do Expo
+  (`apps/mobile/src/dom/NoteEditor.tsx`), importando `apps/desktop/src/editor` direto.
   O Metro troca `~/platform` por uma ponte que pede os arquivos ao lado nativo.
 - **libsodium nativa** (`react-native-libsodium`) no lugar da WebAssembly, com os mesmos
   nomes, então `@markdown-viewer/crypto` roda sem mudar.
@@ -389,6 +409,7 @@ Celular e tablet, só leitura nesta primeira versão.
   quando a busca local precisar de um índice guardado.
 
 **Entregas da etapa 8:** (1) pareamento, espelho, árvore e leitura de notas e imagens;
+(1b) edição: editar, criar, renomear, mover e apagar notas e pastas, com imagens;
 (2) abertura rápida, busca, tags, favoritos, backlinks e sumário; (3) HTML com estado
 sincronizado, PDF nativo, Bases e código; (4) comentários e feedback; (5) layout de
 tablet.

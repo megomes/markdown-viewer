@@ -26,6 +26,14 @@ A `react-native-libsodium` também quebrava no Windows por causa das barras inve
 caminho do `node_modules`. Isso já vem corrigido em `patches/`, aplicado pelo
 `postinstall` da raiz.
 
+O Metro do app sobe com `npm run start -w @markdown-viewer/mobile` (porta 8081). O APK
+de desenvolvimento guarda a porta que estava livre quando foi compilado: se o app
+disser "Unable to load script", veja no `adb logcat` a porta que ele procura e suba o
+Metro nela (`-- --port 8082`).
+
+No app de desenvolvimento o editor da nota é servido pelo Metro, então modo avião
+derruba o próprio editor. Para testar edição sem rede, desligue o servidor de sync.
+
 ## Testar com um servidor local
 
 ```bash

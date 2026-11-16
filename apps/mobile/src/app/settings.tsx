@@ -15,7 +15,10 @@ export default function Settings() {
   const confirmUnpair = () =>
     Alert.alert(
       'Desparear este aparelho?',
-      'A cópia do vault neste aparelho é apagada. O vault e os outros aparelhos não mudam.',
+      (vault.pending > 0
+        ? `ATENÇÃO: ${vault.pending} ${vault.pending === 1 ? 'alteração feita aqui ainda não foi enviada e será perdida' : 'alterações feitas aqui ainda não foram enviadas e serão perdidas'}. `
+        : '') +
+        'A cópia do vault neste aparelho é apagada. O vault e os outros aparelhos não mudam.',
       [
         { text: 'Cancelar', style: 'cancel' },
         {
@@ -72,6 +75,7 @@ export default function Settings() {
             <Row label="Este aparelho" value={vault.deviceName ?? ''} />
             <Row label="Arquivos" value={String(vault.files.length)} />
             <Row label="Baixados" value={String(vault.files.filter((file) => file.local).length)} />
+            <Row label="Esperando envio" value={String(vault.pending)} />
             <Pressable style={styles.secondary} onPress={confirmUnpair}>
               <Text style={[styles.secondaryText, styles.danger]}>Desparear</Text>
             </Pressable>

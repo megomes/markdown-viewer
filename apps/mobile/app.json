@@ -2,7 +2,7 @@
   "expo": {
     "name": "markdown-viewer",
     "slug": "markdown-viewer",
-    "version": "0.9.0",
+    "version": "0.10.0",
     "scheme": "markdown-viewer",
     "orientation": "default",
     "icon": "./assets/icon.png",
@@ -24,8 +24,16 @@
       [
         "expo-camera",
         {
-          "cameraPermission": "A câmera lê o QR de pareamento mostrado pelo desktop.",
+          "cameraPermission": "A câmera lê o QR de pareamento e tira as fotos que entram nas notas.",
           "recordAudioAndroid": false
+        }
+      ],
+      [
+        "expo-image-picker",
+        {
+          "cameraPermission": "A câmera tira a foto que entra na nota.",
+          "photosPermission": "As fotos escolhidas entram na nota.",
+          "microphonePermission": false
         }
       ],
       "./plugins/with-release-signing"

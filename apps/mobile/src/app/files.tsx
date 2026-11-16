@@ -1,14 +1,41 @@
 /**
  * The vault's tree, one folder per screen: tapping a folder goes into it, the
  * back gesture comes out. Folders first, then files, as on the desktop.
+ *
+ * The round button makes a note here. Holding a row offers what the desktop's
+ * right click does: rename, move, delete.
  */
 
-import { useMemo } from 'react'
-import { FlatList, Pressable, RefreshControl, StyleSheet, Text, View } from 'react-native'
+import { useMemo, useState } from 'react'
+import {
+  Alert,
+  FlatList,
+  KeyboardAvoidingView,
+  Modal,
+  Pressable,
+  RefreshControl,
+  StyleSheet,
+  Text,
+  TextInput,
+  View,
+} from 'react-native'
 import { router, Stack, useLocalSearchParams } from 'expo-router'
-import { childrenOf, syncNow, useVault, type TreeNode } from '../vault/runtime'
+import { useSafeAreaInsets } from 'react-native-safe-area-context'
+import {
+  allFolders,
+  childrenOf,
+  createFolder,
+  createNote,
+  dismissNotice,
+  nameProblem,
+  relocate,
+  removePath,
+  syncNow,
+  useVault,
+  type TreeNode,
+} from '../vault/runtime'
 import { useUpdates } from '../updates/updater'
-import { colors } from '../ui/theme'
+import { colors, radius } from '../ui/theme'
 
 function sizeLabel(bytes: number): string {
   if (bytes < 1024) return `${bytes} B`
@@ -21,47 +48,176 @@ function timeLabel(at: number): string {
   return `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`
 }
 
+const NOTE = /\.(md|markdown)$/i
+const messageOf = (error: unknown) => (error instanceof Error ? error.message : String(error))
+
+type Dialog =
+  | { kind: 'actions'; node: TreeNode }
+  | { kind: 'rename'; node: TreeNode }
+  | { kind: 'move'; node: TreeNode }
+  | { kind: 'folder' }
+
 export default function Files() {
   const { folder = '' } = useLocalSearchParams<{ folder?: string }>()
   const vault = useVault()
   const updates = useUpdates()
-  const nodes = useMemo(() => childrenOf(vault.files, folder), [vault.files, folder])
+  const insets = useSafeAreaInsets()
+  const nodes = useMemo(
+    () => childrenOf(vault.files, folder, vault.folders),
+    [vault.files, vault.folders, folder],
+  )
   const title = folder ? folder.slice(folder.lastIndexOf('/') + 1) : 'Vault'
+  const [dialog, setDialog] = useState<Dialog | null>(null)
+  const [typed, setTyped] = useState('')
+  const [problem, setProblem] = useState<string | null>(null)
 
+  const waiting =
+    vault.pending > 0
+      ? vault.pending === 1
+        ? '1 alteração esperando envio'
+        : `${vault.pending} alterações esperando envio`
+      : ''
   const status = vault.syncing
     ? vault.progress
       ? `Sincronizando ${vault.progress.done} de ${vault.progress.total}`
       : 'Sincronizando…'
     : vault.error
-      ? 'Sem conexão com o servidor. O que já está no aparelho abre normalmente.'
-      : vault.lastSync
-        ? `Atualizado às ${timeLabel(vault.lastSync)}`
-        : ''
+      ? waiting
+        ? `Sem conexão. ${waiting}: sobe quando a rede voltar.`
+        : 'Sem conexão com o servidor. O que já está no aparelho abre normalmente.'
+      : waiting || (vault.lastSync ? `Atualizado às ${timeLabel(vault.lastSync)}` : '')
 
   const open = (node: TreeNode) => {
     if (node.kind === 'directory')
       router.push({ pathname: '/files', params: { folder: node.path } })
-    else router.push({ pathname: '/note', params: { path: node.path } })
+    else if (node.fileId) router.push({ pathname: '/note', params: { id: node.fileId } })
   }
+
+  const close = () => {
+    setDialog(null)
+    setProblem(null)
+  }
+
+  const newNote = async () => {
+    try {
+      const id = await createNote(folder)
+      router.push({ pathname: '/note', params: { id, edit: '1' } })
+    } catch (error) {
+      Alert.alert('Não deu para criar a nota', messageOf(error))
+    }
+  }
+
+  const startRename = (node: TreeNode) => {
+    setTyped(node.kind === 'file' ? node.name.replace(NOTE, '') : node.name)
+    setProblem(null)
+    setDialog({ kind: 'rename', node })
+  }
+
+  const confirmRename = async (node: TreeNode) => {
+    const extension = node.kind === 'file' ? (NOTE.exec(node.name)?.[0] ?? '') : ''
+    const bad = nameProblem(typed)
+    if (bad) return setProblem(bad)
+    try {
+      await relocate(node.path, (folder ? folder + '/' : '') + typed.trim() + extension)
+      close()
+    } catch (error) {
+      setProblem(messageOf(error))
+    }
+  }
+
+  const moveTo = async (node: TreeNode, target: string) => {
+    try {
+      await relocate(node.path, (target ? target + '/' : '') + node.name)
+      close()
+    } catch (error) {
+      setProblem(messageOf(error))
+    }
+  }
+
+  const confirmFolder = async () => {
+    try {
+      await createFolder(folder, typed)
+      close()
+    } catch (error) {
+      setProblem(messageOf(error))
+    }
+  }
+
+  const confirmDelete = (node: TreeNode) => {
+    close()
+    const inside =
+      node.kind === 'directory'
+        ? vault.files.filter((file) => file.path.startsWith(node.path + '/')).length
+        : 0
+    Alert.alert(
+      node.kind === 'directory' ? `Apagar a pasta "${node.name}"?` : `Apagar "${node.name}"?`,
+      node.kind === 'directory'
+        ? inside === 0
+          ? 'A pasta está vazia.'
+          : `${inside} ${inside === 1 ? 'arquivo sai' : 'arquivos saem'} do vault em todos os aparelhos. No computador eles vão para a lixeira.`
+        : 'Sai do vault em todos os aparelhos. No computador vai para a lixeira.',
+      [
+        { text: 'Cancelar', style: 'cancel' },
+        {
+          text: 'Apagar',
+          style: 'destructive',
+          onPress: () =>
+            void removePath(node.path).catch((error: unknown) =>
+              Alert.alert('Não deu para apagar', messageOf(error)),
+            ),
+        },
+      ],
+    )
+  }
+
+  const destinations = useMemo(() => {
+    if (dialog?.kind !== 'move') return []
+    const node = dialog.node
+    return ['', ...allFolders(vault.files, vault.folders)].filter(
+      (target) =>
+        target !== folder &&
+        !(
+          node.kind === 'directory' &&
+          (target === node.path || target.startsWith(node.path + '/'))
+        ),
+    )
+  }, [dialog, vault.files, vault.folders, folder])
 
   return (
     <View style={styles.screen}>
       <Stack.Screen
         options={{
           title,
-          headerRight: folder
-            ? undefined
-            : () => (
-                <Pressable onPress={() => router.push('/settings')} hitSlop={12}>
+          headerRight: () => (
+            <View style={styles.headerActions}>
+              <Pressable
+                onPress={() => {
+                  setTyped('')
+                  setProblem(null)
+                  setDialog({ kind: 'folder' })
+                }}
+                hitSlop={10}
+              >
+                <Text style={styles.headerAction}>Nova pasta</Text>
+              </Pressable>
+              {folder ? null : (
+                <Pressable onPress={() => router.push('/settings')} hitSlop={10}>
                   <Text style={styles.headerAction}>Ajustes</Text>
                 </Pressable>
-              ),
+              )}
+            </View>
+          ),
         }}
       />
       {status ? <Text style={styles.status}>{status}</Text> : null}
+      {vault.notice ? (
+        <Pressable style={styles.banner} onPress={dismissNotice}>
+          <Text style={styles.bannerText}>{vault.notice} Toque para dispensar.</Text>
+        </Pressable>
+      ) : null}
       {!folder && updates.update ? (
-        <Pressable style={styles.update} onPress={() => router.push('/settings')}>
-          <Text style={styles.updateText}>
+        <Pressable style={styles.banner} onPress={() => router.push('/settings')}>
+          <Text style={styles.bannerText}>
             Versão {updates.update.label} disponível. Toque para atualizar.
           </Text>
         </Pressable>
@@ -69,6 +225,7 @@ export default function Files() {
       <FlatList
         data={nodes}
         keyExtractor={(node) => node.path}
+        contentContainerStyle={{ paddingBottom: 96 + insets.bottom }}
         refreshControl={
           <RefreshControl
             refreshing={vault.syncing}
@@ -80,12 +237,14 @@ export default function Files() {
         }
         ListEmptyComponent={
           <Text style={styles.empty}>
-            {vault.syncing ? 'Baixando o vault…' : 'Nada aqui ainda. Puxe para sincronizar.'}
+            {vault.syncing ? 'Baixando o vault…' : 'Nada aqui ainda. O botão + cria uma nota.'}
           </Text>
         }
         renderItem={({ item }) => (
           <Pressable
             onPress={() => open(item)}
+            onLongPress={() => setDialog({ kind: 'actions', node: item })}
+            delayLongPress={350}
             style={({ pressed }) => [styles.row, pressed && styles.rowPressed]}
           >
             <Text style={styles.icon}>{item.kind === 'directory' ? '▸' : '·'}</Text>
@@ -95,13 +254,131 @@ export default function Files() {
             >
               {item.kind === 'file' ? item.name.replace(/\.md$/i, '') : item.name}
             </Text>
-            {item.kind === 'file' && !item.local ? (
+            {item.kind === 'file' && item.pending ? (
+              <Text style={styles.meta}>esperando envio</Text>
+            ) : item.kind === 'file' && !item.local ? (
               <Text style={styles.meta}>{sizeLabel(item.size)} · baixa ao abrir</Text>
             ) : null}
           </Pressable>
         )}
       />
+      <Pressable
+        onPress={() => void newNote()}
+        accessibilityLabel="Nova nota"
+        style={({ pressed }) => [
+          styles.fab,
+          { bottom: 24 + insets.bottom },
+          pressed && styles.fabPressed,
+        ]}
+      >
+        <Text style={styles.fabText}>+</Text>
+      </Pressable>
+
+      <Modal visible={dialog !== null} transparent animationType="fade" onRequestClose={close}>
+        <KeyboardAvoidingView style={styles.scrim} behavior="padding">
+          <Pressable style={StyleSheet.absoluteFill} onPress={close} />
+          <View style={[styles.sheet, { paddingBottom: 16 + insets.bottom }]}>
+            {dialog?.kind === 'actions' ? (
+              <>
+                <Text style={styles.sheetTitle} numberOfLines={1}>
+                  {dialog.node.name}
+                </Text>
+                <SheetButton label="Renomear" onPress={() => startRename(dialog.node)} />
+                <SheetButton
+                  label="Mover para…"
+                  onPress={() => setDialog({ kind: 'move', node: dialog.node })}
+                />
+                <SheetButton danger label="Apagar" onPress={() => confirmDelete(dialog.node)} />
+              </>
+            ) : null}
+
+            {dialog?.kind === 'rename' || dialog?.kind === 'folder' ? (
+              <>
+                <Text style={styles.sheetTitle}>
+                  {dialog.kind === 'folder' ? 'Nova pasta' : 'Renomear'}
+                </Text>
+                <TextInput
+                  style={styles.input}
+                  value={typed}
+                  onChangeText={(value) => {
+                    setTyped(value)
+                    setProblem(null)
+                  }}
+                  autoFocus
+                  selectTextOnFocus
+                  placeholder="Nome"
+                  placeholderTextColor={colors.textTertiary}
+                  returnKeyType="done"
+                  onSubmitEditing={() =>
+                    void (dialog.kind === 'folder' ? confirmFolder() : confirmRename(dialog.node))
+                  }
+                />
+                {problem ? <Text style={styles.problem}>{problem}</Text> : null}
+                <Pressable
+                  style={styles.primary}
+                  onPress={() =>
+                    void (dialog.kind === 'folder' ? confirmFolder() : confirmRename(dialog.node))
+                  }
+                >
+                  <Text style={styles.primaryText}>
+                    {dialog.kind === 'folder' ? 'Criar' : 'Salvar'}
+                  </Text>
+                </Pressable>
+              </>
+            ) : null}
+
+            {dialog?.kind === 'move' ? (
+              <>
+                <Text style={styles.sheetTitle} numberOfLines={1}>
+                  Mover "{dialog.node.name}" para
+                </Text>
+                {problem ? <Text style={styles.problem}>{problem}</Text> : null}
+                <FlatList
+                  style={styles.destinations}
+                  data={destinations}
+                  keyExtractor={(target) => target || '/'}
+                  renderItem={({ item }) => (
+                    <Pressable
+                      onPress={() => void moveTo(dialog.node, item)}
+                      style={({ pressed }) => [styles.destination, pressed && styles.rowPressed]}
+                    >
+                      <Text
+                        style={[
+                          styles.destinationText,
+                          { paddingLeft: item ? 14 * (item.split('/').length - 1) : 0 },
+                        ]}
+                        numberOfLines={1}
+                      >
+                        {item ? item.slice(item.lastIndexOf('/') + 1) : 'Vault (raiz)'}
+                      </Text>
+                    </Pressable>
+                  )}
+                />
+              </>
+            ) : null}
+          </View>
+        </KeyboardAvoidingView>
+      </Modal>
     </View>
+  )
+}
+
+function SheetButton({
+  label,
+  onPress,
+  danger = false,
+}: {
+  label: string
+  onPress: () => void
+  danger?: boolean
+}) {
+  return (
+    <Pressable
+      onPress={onPress}
+      style={({ pressed }) => [styles.sheetButton, pressed && styles.rowPressed]}
+    >
+      <Text style={[styles.sheetButtonText, danger && styles.danger]}>{label}</Text>
+    </Pressable>
   )
 }
 
@@ -113,8 +390,9 @@ const styles = StyleSheet.create({
     paddingHorizontal: 20,
     paddingBottom: 8,
   },
+  headerActions: { flexDirection: 'row', gap: 18 },
   headerAction: { color: colors.textSecondary, fontSize: 14 },
-  update: {
+  banner: {
     marginHorizontal: 20,
     marginBottom: 10,
     padding: 12,
@@ -123,7 +401,7 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: colors.borderDefault,
   },
-  updateText: { color: colors.textPrimary, fontSize: 14 },
+  bannerText: { color: colors.textPrimary, fontSize: 14, lineHeight: 20 },
   row: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -139,4 +417,61 @@ const styles = StyleSheet.create({
   folder: { fontWeight: '600' },
   meta: { color: colors.textTertiary, fontSize: 12 },
   empty: { color: colors.textTertiary, padding: 20, fontSize: 15 },
+  fab: {
+    position: 'absolute',
+    right: 22,
+    width: 58,
+    height: 58,
+    borderRadius: 29,
+    backgroundColor: colors.accent,
+    alignItems: 'center',
+    justifyContent: 'center',
+    elevation: 6,
+  },
+  fabPressed: { opacity: 0.8 },
+  fabText: { color: '#ffffff', fontSize: 30, lineHeight: 34, fontWeight: '400' },
+  scrim: { flex: 1, backgroundColor: 'rgba(0,0,0,0.55)', justifyContent: 'flex-end' },
+  sheet: {
+    backgroundColor: colors.surface1,
+    borderTopLeftRadius: 18,
+    borderTopRightRadius: 18,
+    borderWidth: 1,
+    borderColor: colors.borderDefault,
+    paddingTop: 18,
+    paddingHorizontal: 12,
+    gap: 4,
+  },
+  sheetTitle: {
+    color: colors.textSecondary,
+    fontSize: 14,
+    paddingHorizontal: 10,
+    paddingBottom: 8,
+  },
+  sheetButton: { paddingHorizontal: 10, paddingVertical: 15, borderRadius: radius.md },
+  sheetButtonText: { color: colors.textPrimary, fontSize: 17 },
+  danger: { color: colors.accentText },
+  input: {
+    marginHorizontal: 6,
+    borderRadius: radius.md,
+    borderWidth: 1,
+    borderColor: colors.borderDefault,
+    backgroundColor: colors.bgContent,
+    color: colors.textPrimary,
+    fontSize: 17,
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+  },
+  problem: { color: colors.accentText, fontSize: 13, paddingHorizontal: 10, paddingTop: 6 },
+  primary: {
+    marginHorizontal: 6,
+    marginTop: 10,
+    backgroundColor: colors.textPrimary,
+    borderRadius: radius.md,
+    paddingVertical: 13,
+    alignItems: 'center',
+  },
+  primaryText: { color: colors.bgApp, fontWeight: '600', fontSize: 16 },
+  destinations: { maxHeight: 380 },
+  destination: { paddingHorizontal: 10, paddingVertical: 13, borderRadius: radius.md },
+  destinationText: { color: colors.textPrimary, fontSize: 16 },
 })

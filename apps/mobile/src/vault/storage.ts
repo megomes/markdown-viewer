@@ -9,6 +9,8 @@ import type { MirrorState, MirrorStore } from '@markdown-viewer/sync/mirror'
 
 export const vaultDir = new Directory(Paths.document, 'vault')
 const stateFile = new File(Paths.document, 'mirror.json')
+const basesDir = new Directory(Paths.document, 'bases')
+const foldersFile = new File(Paths.document, 'folders.json')
 
 function fileAt(path: string): File {
   return new File(vaultDir, ...path.split('/'))
@@ -81,10 +83,47 @@ export class PhoneMirrorStore implements MirrorStore {
     await next.write(JSON.stringify(state))
     await next.move(stateFile, { overwrite: true })
   }
+
+  async getBase(fileId: string): Promise<Uint8Array | null> {
+    const file = new File(basesDir, fileId)
+    return file.exists ? file.bytes() : null
+  }
+
+  async setBase(fileId: string, bytes: Uint8Array | null): Promise<void> {
+    const file = new File(basesDir, fileId)
+    if (!bytes) {
+      if (file.exists) file.delete()
+      return
+    }
+    if (!basesDir.exists) basesDir.create({ intermediates: true })
+    if (!file.exists) file.create()
+    await file.write(bytes)
+  }
+}
+
+/**
+ * Folders made on this phone that have nothing in them yet. The vault's server
+ * knows files, not folders, so an empty one exists only here until a note goes in.
+ */
+export async function loadEmptyFolders(): Promise<string[]> {
+  try {
+    if (!foldersFile.exists) return []
+    const value = JSON.parse(await foldersFile.text()) as unknown
+    return Array.isArray(value) ? value.filter((item) => typeof item === 'string') : []
+  } catch {
+    return []
+  }
+}
+
+export async function saveEmptyFolders(folders: string[]): Promise<void> {
+  if (!foldersFile.exists) foldersFile.create()
+  await foldersFile.write(JSON.stringify(folders))
 }
 
 /** Forgets the vault on this phone: its copy and its state. */
 export function wipeLocalVault(): void {
   if (vaultDir.exists) vaultDir.delete()
   if (stateFile.exists) stateFile.delete()
+  if (basesDir.exists) basesDir.delete()
+  if (foldersFile.exists) foldersFile.delete()
 }

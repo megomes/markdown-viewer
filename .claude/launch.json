@@ -6,6 +6,12 @@
       "runtimeExecutable": "npm",
       "runtimeArgs": ["run", "dev"],
       "port": 5273
+    },
+    {
+      "name": "mobile-metro",
+      "runtimeExecutable": "npm",
+      "runtimeArgs": ["run", "start", "-w", "@markdown-viewer/mobile", "--", "--port", "8081"],
+      "port": 8081
     }
   ]
 }
