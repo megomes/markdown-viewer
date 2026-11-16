@@ -94,6 +94,7 @@ import {
   type EnvironmentsConfig,
 } from '~/app/environments'
 import { ATTACHMENTS } from '@markdown-viewer/core/environments'
+import { attachmentName, attachmentsFolder, embeddedFiles } from '@markdown-viewer/core/attachments'
 import { FilesPanel } from './FilesPanel'
 import {
   getVault,
@@ -921,6 +922,9 @@ export function App() {
     report: setNotice,
   })
   const activeDoc = state.activeId ? (state.docs[state.activeId] ?? null) : null
+  // What the open note carries, for the panel on the side.
+  const activeText = activeDoc?.text ?? ''
+  const activeAttachments = useMemo(() => embeddedFiles(activeText), [activeText])
   // Read from callbacks that must not change identity on every keystroke. The
   // assignment happens after the commit, which is the only moment React allows
   // a ref to be written.
@@ -1662,6 +1666,50 @@ export function App() {
     }
   }
 
+  /**
+   * Saves a file pasted or dropped into a note as its attachment: in the `Files`
+   * folder of the note's environment, under the note's own name and a number.
+   */
+  const attach = async (tab: Tab, file: File): Promise<string | null> => {
+    try {
+      const files = fileSystem()
+      const folder = attachmentsFolder(tab.path, tab.baseId === vault ? environments : [])
+      const fromName = /\.([a-z0-9]{1,8})$/i.exec(file.name)?.[1]
+      const fromType = file.type.split('/')[1]?.replace('jpeg', 'jpg').replace('svg+xml', 'svg')
+      const known = new Set(
+        (state.index[tab.baseId]?.paths ?? []).map((path) =>
+          path.slice(path.lastIndexOf('/') + 1).toLowerCase(),
+        ),
+      )
+      // A file that came with a name of its own keeps it, unless that name is
+      // one of the clipboard's ("image.png") or is already in the vault.
+      const own = file.name && !/^(image|imagem|pasted image)\b/i.test(file.name) ? file.name : ''
+      let name = own && !known.has(own.toLowerCase()) ? own : ''
+      if (!name) {
+        name = attachmentName(tab.name, fromName ?? fromType ?? 'png', (candidate) =>
+          known.has(candidate.toLowerCase()),
+        )
+      }
+      await files.createFolder(tab.baseId, folder).catch(() => {})
+      while (await files.stat(tab.baseId, folder + '/' + name)) {
+        known.add(name.toLowerCase())
+        name = attachmentName(tab.name, fromName ?? fromType ?? 'png', (candidate) =>
+          known.has(candidate.toLowerCase()),
+        )
+      }
+      const bytes = new Uint8Array(await file.arrayBuffer())
+      await files.write(tab.baseId, folder + '/' + name, bytes)
+      // The embed is written with the name alone: the index has to know the file.
+      await actions.indexBase(tab.baseId)
+      return name
+    } catch (error) {
+      setNotice(
+        'Não deu para guardar o anexo: ' + (error instanceof Error ? error.message : String(error)),
+      )
+      return null
+    }
+  }
+
   /** Picks the vault's folder: it becomes a base and, from then on, the vault. */
   const chooseVault = async () => {
     const base = await actions.openBase()
@@ -2126,6 +2174,11 @@ export function App() {
                     ? undefined
                     : (stem) => renameFromTitle(activeTab, stem)
                 }
+                onAttach={
+                  isLooseTab(activeTab) || isDraft(activeTab)
+                    ? undefined
+                    : (file) => attach(activeTab, file)
+                }
                 onChange={(text) => {
                   actions.edit(activeTab.id, text)
                   // The note on the edge of the screen, and the glance, show
@@ -2160,6 +2213,7 @@ export function App() {
               {settings.infoPanel && (
                 <InfoPanel
                   tab={activeTab}
+                  attachments={activeAttachments}
                   onFind={(text) => {
                     const view = editor.current
                     if (!view) return

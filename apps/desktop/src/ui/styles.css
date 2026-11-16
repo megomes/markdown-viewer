@@ -1105,14 +1105,19 @@ a:focus-visible,
 }
 
 .info-tab {
-  flex: 1;
+  flex: 1 1 auto;
+  min-width: 0;
   height: 2rem;
+  padding: 0 0.25rem;
+  overflow: hidden;
   border: 0;
   border-bottom: 1.5px solid transparent;
   background: transparent;
   color: var(--text-tertiary);
   font: inherit;
   font-size: 0.75rem;
+  text-overflow: ellipsis;
+  white-space: nowrap;
   cursor: pointer;
   transition:
     color var(--ease),

@@ -1,17 +1,31 @@
-import { memo, useState } from 'react'
+import { memo, useEffect, useState } from 'react'
 import type { BaseIndex } from '@markdown-viewer/core/base-index'
 import type { Heading } from '~/editor/outline'
 import { pathIn, type Tab } from '~/app/store'
 import { entryId } from '@markdown-viewer/core/fs'
 import { MarkdownIcon } from './icons'
 import { NoteComments } from './NoteComments'
+import { resolveImage } from '~/editor/images'
+import { resolveLink } from '~/editor/links'
+import { viewerOf } from '@markdown-viewer/core/fs'
+import { FileIcon } from './icons'
+import { Link2, ListTree, MessageSquare, Paperclip } from 'lucide-react'
 
-type Page = 'sumario' | 'links' | 'comentarios'
+type Page = 'sumario' | 'links' | 'anexos' | 'comentarios'
+
+const PAGES: { id: Page; label: string; Icon: typeof ListTree }[] = [
+  { id: 'sumario', label: 'Sumário', Icon: ListTree },
+  { id: 'links', label: 'Links', Icon: Link2 },
+  { id: 'anexos', label: 'Anexos', Icon: Paperclip },
+  { id: 'comentarios', label: 'Comentários', Icon: MessageSquare },
+]
 
 interface Props {
   tab: Tab
   headings: Heading[]
   index: BaseIndex | undefined
+  /** What the note embeds that is not a note, as written in it. */
+  attachments: string[]
   onGoTo: (position: number) => void
   onOpenPath: (baseId: string, path: string) => void
   /** Finds and selects a quoted passage in the open note. */
@@ -22,6 +36,7 @@ export const InfoPanel = memo(function InfoPanel({
   tab,
   headings,
   index,
+  attachments,
   onGoTo,
   onOpenPath,
   onFind,
@@ -30,39 +45,32 @@ export const InfoPanel = memo(function InfoPanel({
 
   return (
     <aside className="info">
+      {/* Icons, not words: four words do not fit the width this panel opens at. */}
       <div className="info-tabs" role="tablist">
-        <button
-          type="button"
-          role="tab"
-          aria-selected={page === 'sumario'}
-          className={'info-tab' + (page === 'sumario' ? ' is-active' : '')}
-          onClick={() => setPage('sumario')}
-        >
-          Sumário
-        </button>
-        <button
-          type="button"
-          role="tab"
-          aria-selected={page === 'links'}
-          className={'info-tab' + (page === 'links' ? ' is-active' : '')}
-          onClick={() => setPage('links')}
-        >
-          Links
-        </button>
-        <button
-          type="button"
-          role="tab"
-          aria-selected={page === 'comentarios'}
-          className={'info-tab' + (page === 'comentarios' ? ' is-active' : '')}
-          onClick={() => setPage('comentarios')}
-        >
-          Comentários
-        </button>
+        {PAGES.map(({ id, label, Icon }) => (
+          <button
+            key={id}
+            type="button"
+            role="tab"
+            aria-selected={page === id}
+            aria-label={label}
+            title={label}
+            className={'info-tab' + (page === id ? ' is-active' : '')}
+            onClick={() => setPage(id)}
+          >
+            <Icon size={15} strokeWidth={1.75} />
+            {id === 'anexos' && attachments.length > 0 && (
+              <span className="info-tab-count">{attachments.length}</span>
+            )}
+          </button>
+        ))}
       </div>
 
       <div className="info-body">
         {page === 'sumario' ? (
           <Outline headings={headings} onGoTo={onGoTo} />
+        ) : page === 'anexos' ? (
+          <Attachments tab={tab} attachments={attachments} onOpenPath={onOpenPath} />
         ) : page === 'comentarios' ? (
           <NoteComments baseId={tab.baseId} path={tab.path} name={tab.name} onFind={onFind} />
         ) : (
@@ -178,5 +186,78 @@ function Links({ tab, index, onOpenPath }: LinksProps) {
         </ul>
       )}
     </>
+  )
+}
+
+/** The pictures and files the note carries, wherever in the vault they are kept. */
+function Attachments({
+  tab,
+  attachments,
+  onOpenPath,
+}: {
+  tab: Tab
+  attachments: string[]
+  onOpenPath: (baseId: string, path: string) => void
+}) {
+  if (attachments.length === 0) {
+    return (
+      <p className="info-empty">
+        Esta nota não tem anexos. Cole uma imagem no texto e ela é guardada na pasta Files do
+        ambiente.
+      </p>
+    )
+  }
+  return (
+    <ul className="info-attachments">
+      {attachments.map((target) => (
+        <Attachment key={target} tab={tab} target={target} onOpenPath={onOpenPath} />
+      ))}
+    </ul>
+  )
+}
+
+function Attachment({
+  tab,
+  target,
+  onOpenPath,
+}: {
+  tab: Tab
+  target: string
+  onOpenPath: (baseId: string, path: string) => void
+}) {
+  const path = resolveLink(tab.baseId, target, tab.path) ?? null
+  const name = target.slice(target.lastIndexOf('/') + 1)
+  const image = viewerOf(name) === 'image'
+  const [url, setUrl] = useState<string | null>(null)
+  useEffect(() => {
+    if (!image) return
+    let live = true
+    void resolveImage({ baseId: tab.baseId, path: tab.path }, target).then((found) => {
+      if (live) setUrl(found)
+    })
+    return () => {
+      live = false
+    }
+  }, [image, tab.baseId, tab.path, target])
+
+  return (
+    <li>
+      <button
+        type="button"
+        className={'info-attachment' + (path ? '' : ' is-missing')}
+        title={path ?? 'Não encontrado no vault: ' + target}
+        disabled={!path}
+        onClick={() => path && onOpenPath(tab.baseId, path)}
+      >
+        {image && url ? (
+          <img src={url} alt="" loading="lazy" />
+        ) : (
+          <span className="info-attachment-file">
+            <FileIcon size={18} />
+          </span>
+        )}
+        <span className="info-name">{name}</span>
+      </button>
+    </li>
   )
 }

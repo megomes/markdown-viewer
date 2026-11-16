@@ -41,6 +41,12 @@ interface Props {
    */
   onRename?: Rename
   /**
+   * Saves a file pasted or dropped into the note as an attachment, and resolves
+   * to the name to embed it by, or null when it was not saved. Without it a
+   * pasted picture is left to the browser, which does nothing with it.
+   */
+  onAttach?: (file: File) => Promise<string | null>
+  /**
    * Whether the cursor lands here as soon as the editor is built. True in the
    * app, where opening a file is a request to write in it. False in the note
    * that floats out on hover, which nobody asked to type in yet.
@@ -59,14 +65,23 @@ export function EditorPane({
   onOutline,
   onReady,
   onRename,
+  onAttach,
   autoFocus = true,
 }: Props) {
   const host = useRef<HTMLDivElement>(null)
   const view = useRef<EditorView | null>(null)
   /** Cursor and history per tab, so switching back lands where you left. */
   const parked = useRef(new Map<string, EditorState>())
-  const handlers = useRef({ onChange, onSave, onViewChange, onOutline, onReady, onRename })
-  handlers.current = { onChange, onSave, onViewChange, onOutline, onReady, onRename }
+  const handlers = useRef({
+    onChange,
+    onSave,
+    onViewChange,
+    onOutline,
+    onReady,
+    onRename,
+    onAttach,
+  })
+  handlers.current = { onChange, onSave, onViewChange, onOutline, onReady, onRename, onAttach }
   /**
    * One function for the life of the pane, which calls whatever renaming the
    * parent hands in at the time. The title widget keeps the function it was
@@ -108,7 +123,50 @@ export function EditorPane({
         // summary has to catch up with it.
         publishOutline()
       }),
+      // A picture pasted from the clipboard, or files dropped on the note,
+      // become attachments, embedded where the caret (or the drop) is.
+      EditorView.domEventHandlers({
+        paste(event, target) {
+          const files = [...(event.clipboardData?.files ?? [])]
+          if (files.length === 0 || !handlers.current.onAttach) return false
+          event.preventDefault()
+          void attachAll(target, files, target.state.selection.main.head)
+          return true
+        },
+        drop(event, target) {
+          const files = [...(event.dataTransfer?.files ?? [])]
+          if (files.length === 0 || !handlers.current.onAttach) return false
+          event.preventDefault()
+          const at =
+            target.posAtCoords({ x: event.clientX, y: event.clientY }) ??
+            target.state.selection.main.head
+          void attachAll(target, files, at)
+          return true
+        },
+      }),
     ]
+
+    async function attachAll(target: EditorView, files: File[], at: number) {
+      const names: string[] = []
+      for (const file of files) {
+        const name = await handlers.current.onAttach?.(file)
+        if (name) names.push(name)
+      }
+      if (names.length === 0 || target !== view.current) return
+      const line = target.state.doc.lineAt(Math.min(at, target.state.doc.length))
+      const embeds = names.map((name) => `![[${name}]]`).join('\n')
+      // On a line of its own: in an empty line, there; otherwise under the line
+      // the caret is in, never in the middle of its sentence.
+      const empty = line.text.trim() === ''
+      const where = empty ? line.from : line.to
+      const insert = empty ? embeds : '\n' + embeds
+      target.dispatch({
+        changes: { from: where, to: empty ? line.to : where, insert },
+        selection: { anchor: where + insert.length },
+        userEvent: 'input.paste',
+        scrollIntoView: true,
+      })
+    }
 
     // Copied out of the ref so the cleanup below does not read `.current`
     // after the component has moved on.

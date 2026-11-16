@@ -438,6 +438,8 @@ export class MemoryFileSystem implements FileSystem {
     const version = { size: bytes.byteLength, modifiedAt: Date.now() }
     const target = path === '' ? this.loose : this.files
     target.set(path === '' ? baseId : path, { text, version })
+    // The bytes as they came, too: a picture does not survive being read as text.
+    if (path !== '') this.binaries.set(path, bytes)
     return version
   }
 

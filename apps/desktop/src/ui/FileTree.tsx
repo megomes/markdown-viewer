@@ -1,5 +1,6 @@
 import { memo, useEffect, useRef, useState } from 'react'
 import { isPlainText, isTextFile, viewerOf, type Entry } from '@markdown-viewer/core/fs'
+import { isAttachmentsFolder } from '@markdown-viewer/core/attachments'
 import type { TreeSort } from '~/app/settings'
 import { ChevronIcon, FileIcon, FolderIcon, MarkdownIcon } from './icons'
 import { NamedIcon } from './NamedIcon'
@@ -142,6 +143,9 @@ export const FileTree = memo(function FileTree({
     (data.children[parentId] ?? []).filter((entry) => {
       if (JUNK.has(entry.name)) return false
       if (!showHidden && entry.name.startsWith('.')) return false
+      // Attachments are seen from the notes that carry them, not as a folder.
+      if (entry.kind === 'directory' && !showAllFiles && isAttachmentsFolder(entry.path))
+        return false
       if (filter !== '' && !matchesFilter(data, entry, filter)) return false
       if (entry.kind === 'file' && !isWritten(entry.name)) {
         others++
