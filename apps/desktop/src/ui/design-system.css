@@ -859,3 +859,275 @@
   font-family: inherit;
   font-size: 0.6875rem;
 }
+
+/* ------------------------------------------------------------ environments */
+
+/*
+ * The environment in use tints the accent. Only the accent: the brand's indigo
+ * and the tones of state stay, so two environments never look like two apps.
+ */
+:root[data-theme='dark'][data-accent] {
+  --accent: var(--env-accent-dark);
+  --accent-hover: color-mix(in srgb, var(--env-accent-dark) 84%, white);
+  --accent-muted: color-mix(in srgb, var(--env-accent-dark) 48%, black);
+  --accent-text: color-mix(in srgb, var(--env-accent-dark) 82%, white);
+  --accent-on: #0b0b14;
+}
+
+:root[data-theme='light'][data-accent] {
+  --accent: var(--env-accent-light);
+  --accent-hover: color-mix(in srgb, var(--env-accent-light) 86%, white);
+  --accent-muted: color-mix(in srgb, var(--env-accent-light) 32%, white);
+  --accent-text: color-mix(in srgb, var(--env-accent-light) 88%, black);
+  --accent-on: #ffffff;
+}
+
+.env {
+  position: relative;
+  margin-bottom: var(--space-2);
+}
+
+.env-button {
+  display: flex;
+  gap: 0.5625rem;
+  align-items: center;
+  width: 100%;
+  padding: 0.375rem 0.5rem 0.375rem 0.375rem;
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-md);
+  background: var(--surface-1);
+  color: var(--text-primary);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.env-button:hover,
+.env-button.is-open {
+  border-color: var(--border-emphasis);
+  background: var(--surface-hover);
+}
+
+.env-tile {
+  display: grid;
+  flex: 0 0 auto;
+  place-items: center;
+  width: 1.75rem;
+  height: 1.75rem;
+  border-radius: var(--radius-sm);
+  background: color-mix(in srgb, var(--tile-dark) 22%, transparent);
+  color: var(--tile-dark);
+}
+
+:root[data-theme='light'] .env-tile {
+  background: color-mix(in srgb, var(--tile-light) 16%, transparent);
+  color: var(--tile-light);
+}
+
+.env-tile.is-vault,
+:root[data-theme='light'] .env-tile.is-vault {
+  background: var(--surface-2);
+  color: var(--text-secondary);
+}
+
+.env-tile .is-emoji {
+  font-size: 0.875rem;
+  line-height: 1;
+}
+
+.env-text {
+  display: flex;
+  flex: 1 1 auto;
+  flex-direction: column;
+  min-width: 0;
+  line-height: 1.2;
+}
+
+.env-label {
+  color: var(--text-tertiary);
+  font-size: 0.625rem;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.env-name {
+  overflow: hidden;
+  font-size: 0.8125rem;
+  font-weight: 600;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.env-chevron {
+  flex: 0 0 auto;
+  color: var(--text-tertiary);
+}
+
+.env-menu {
+  position: absolute;
+  top: calc(100% + 0.25rem);
+  right: 0;
+  left: 0;
+  z-index: 40;
+  padding: 0.25rem;
+  border: 1px solid var(--border-emphasis);
+  border-radius: var(--radius-md);
+  background: var(--surface-2);
+  box-shadow:
+    0 0.75rem 2rem rgb(0 0 0 / 28%),
+    0 2px 8px rgb(0 0 0 / 18%);
+}
+
+.env-option {
+  display: flex;
+  gap: 0.5625rem;
+  align-items: center;
+  width: 100%;
+  padding: 0.25rem 0.5rem 0.25rem 0.25rem;
+  border: 0;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--text-secondary);
+  font: inherit;
+  font-size: 0.8125rem;
+  text-align: left;
+  cursor: pointer;
+}
+
+.env-option:hover,
+.env-option.is-active {
+  background: var(--surface-hover);
+  color: var(--text-primary);
+}
+
+.env-option-name {
+  flex: 1 1 auto;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.env-option-count {
+  min-width: 1.125rem;
+  padding: 0 0.3125rem;
+  border-radius: var(--radius-pill);
+  background: var(--surface-1);
+  color: var(--text-tertiary);
+  font-size: 0.6875rem;
+  text-align: center;
+}
+
+.env-option-check {
+  flex: 0 0 auto;
+  color: var(--accent-text);
+}
+
+.env-rule {
+  height: 1px;
+  margin: 0.25rem 0.375rem;
+  background: var(--border-subtle);
+}
+
+.env-caption {
+  margin: 0.375rem 0.5rem 0.25rem;
+  color: var(--text-tertiary);
+  font-size: 0.6875rem;
+}
+
+.env-swatches {
+  display: flex;
+  gap: 0.375rem;
+  padding: 0.125rem 0.5rem 0.375rem;
+}
+
+.env-swatch {
+  width: 1.125rem;
+  height: 1.125rem;
+  padding: 0;
+  flex: 0 0 auto;
+  border: 2px solid var(--surface-2);
+  border-radius: var(--radius-pill);
+  background: var(--tile-dark);
+  cursor: pointer;
+}
+
+:root[data-theme='light'] .env-swatch {
+  background: var(--tile-light);
+}
+
+.env-swatch.is-on {
+  box-shadow: 0 0 0 1.5px var(--text-primary);
+}
+
+/* ------------------------------------------------------------- icon picker */
+
+.icon-picker {
+  width: min(520px, calc(100vw - 32px));
+}
+
+.icon-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(2.25rem, 1fr));
+  gap: 2px;
+  flex: 1 1 auto;
+  align-content: start;
+  min-height: 8rem;
+  padding: 8px;
+  overflow-y: auto;
+}
+
+.icon-cell {
+  display: grid;
+  place-items: center;
+  aspect-ratio: 1;
+  padding: 0;
+  border: 1px solid transparent;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--text-secondary);
+  cursor: pointer;
+}
+
+.icon-cell:hover {
+  background: var(--surface-hover);
+  color: var(--text-primary);
+}
+
+.icon-cell.is-on {
+  border-color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 12%, transparent);
+  color: var(--accent-text);
+}
+
+.icon-cell-wait {
+  width: 18px;
+  height: 18px;
+}
+
+.icon-foot {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+  padding: 8px;
+  border-top: 1px solid var(--border-subtle);
+}
+
+.icon-foot-space {
+  flex: 1 1 auto;
+}
+
+.icon-emoji {
+  width: 7rem;
+  padding: 5px 8px;
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-sm);
+  outline: 0;
+  background: var(--bg-content);
+  color: var(--text-primary);
+  font: inherit;
+  font-size: 13px;
+}
+
+.icon-emoji:focus {
+  border-color: var(--accent);
+}

@@ -5,20 +5,27 @@
  *
  * The vault is one folder, chosen once (it is also the folder the sync carries).
  * Search, quick open, Bases and links look only at the space in use.
+ *
+ * An environment (`app/environments.ts`) is a space too: a folder at the root of
+ * the vault, with the vault's base and its own tabs. The vault's own space is
+ * then the whole of it, and holds the tabs that are in no environment.
  */
 
 import { useSyncExternalStore } from 'react'
 import type { Base } from '@markdown-viewer/core/fs'
 import { isDraft } from './drafts'
+import { environmentOfPath } from './environments'
 import type { Tab } from './store'
 
-export type SpaceId = 'vault' | 'files' | `folder:${string}`
+export type SpaceId = 'vault' | 'files' | `folder:${string}` | `env:${string}`
 
 export interface Space {
   id: SpaceId
-  kind: 'vault' | 'folder' | 'files'
+  kind: 'vault' | 'env' | 'folder' | 'files'
   /** The base it shows: the vault's or the folder's. None for "Arquivos". */
   baseId: string | null
+  /** The folder of the base its tree starts at: an environment's own, '' otherwise. */
+  root: string
   name: string
   /** Shown on hover: the folder on disk. */
   label: string
@@ -63,14 +70,27 @@ export function useVault(): string | null {
 }
 
 /** Which space a tab lives in. Drafts belong to the vault, where they will be saved. */
-export function spaceOfTab(tab: Tab, vault: string | null): SpaceId {
+export function spaceOfTab(tab: Tab, vault: string | null, environments: string[] = []): SpaceId {
   if (isDraft(tab)) return 'vault'
   if (tab.path === '') return 'files'
-  if (vault && tab.baseId === vault) return 'vault'
+  if (vault && tab.baseId === vault) {
+    const environment = environmentOfPath(tab.path, environments)
+    return environment ? `env:${environment}` : 'vault'
+  }
   return `folder:${tab.baseId}`
 }
 
-export function spacesOf(bases: Base[], tabs: Tab[], vault: string | null): Space[] {
+/** Whether a space is the vault or a part of it. */
+export function inVault(space: Space): boolean {
+  return space.kind === 'vault' || space.kind === 'env'
+}
+
+export function spacesOf(
+  bases: Base[],
+  tabs: Tab[],
+  vault: string | null,
+  environments: string[] = [],
+): Space[] {
   const vaultBase = bases.find((base) => base.id === vault)
   const spaces: Space[] = [
     {
@@ -79,8 +99,21 @@ export function spacesOf(bases: Base[], tabs: Tab[], vault: string | null): Spac
       baseId: vaultBase?.id ?? null,
       name: vaultBase?.name ?? 'Vault',
       label: vaultBase?.label ?? 'Escolha a pasta do vault',
+      root: '',
     },
   ]
+  if (vaultBase) {
+    for (const folder of environments) {
+      spaces.push({
+        id: `env:${folder}`,
+        kind: 'env',
+        baseId: vaultBase.id,
+        name: folder,
+        label: vaultBase.label + '/' + folder,
+        root: folder,
+      })
+    }
+  }
   for (const base of bases) {
     if (base.id === vault) continue
     spaces.push({
@@ -89,6 +122,7 @@ export function spacesOf(bases: Base[], tabs: Tab[], vault: string | null): Spac
       baseId: base.id,
       name: base.name,
       label: base.label,
+      root: '',
     })
   }
   if (tabs.some((tab) => tab.path === '' && !isDraft(tab))) {
@@ -98,6 +132,7 @@ export function spacesOf(bases: Base[], tabs: Tab[], vault: string | null): Spac
       baseId: null,
       name: 'Arquivos',
       label: 'Arquivos abertos de fora do vault',
+      root: '',
     })
   }
   return spaces

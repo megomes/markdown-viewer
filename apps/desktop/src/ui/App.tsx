@@ -20,7 +20,15 @@ import { on, send, type LiveDoc } from '~/platform/channel'
 import { useDock } from './useDock'
 import { onTrayNewNote } from '~/platform/tray'
 import { DEFAULTS, LIMITS, useSettings } from '~/app/settings'
-import { pathIn, tabViewer, useWorkspace, type Doc, type RenameTarget, type Tab } from '~/app/store'
+import {
+  onEntryMoved,
+  pathIn,
+  tabViewer,
+  useWorkspace,
+  type Doc,
+  type RenameTarget,
+  type Tab,
+} from '~/app/store'
 import { Viewer } from './viewers/Viewer'
 import {
   entryId,
@@ -29,6 +37,7 @@ import {
   type Base,
   type Entry,
 } from '@markdown-viewer/core/fs'
+import { indexUnder } from '@markdown-viewer/core/base-index'
 import type { Heading } from '~/editor/outline'
 import { EditorView, type Command } from '@codemirror/view'
 import { redo, undo } from '@codemirror/commands'
@@ -62,7 +71,9 @@ import { Recents } from './Recents'
 import { SettingsWindow } from './SettingsWindow'
 import { Feedback } from './Feedback'
 import { useVaultLinks } from './useVaultLinks'
-import { readFolderIcons } from '~/app/folder-icons'
+import { readFolderIcons, saveFolderIcons } from '~/app/folder-icons'
+import { iconsAfterMove, type IconMap } from '@markdown-viewer/core/icons'
+import { IconPicker } from './IconPicker'
 import { readBookmarks, type Bookmark } from '~/app/bookmarks'
 import { QuickOpen } from './QuickOpen'
 import { SearchPanel } from './SearchPanel'
@@ -72,9 +83,21 @@ import { openTarget } from '~/editor/links'
 import { Cloud, CloudAlert, CloudOff, MessageSquareText, RefreshCw } from 'lucide-react'
 import { SyncPanel } from './SyncPanel'
 import { SpaceStrip } from './SpaceStrip'
+import { EnvironmentSwitcher, type EnvironmentItem } from './EnvironmentSwitcher'
+import {
+  colorOf,
+  environmentsOf,
+  knownEnvironments,
+  readEnvironments,
+  rememberEnvironments,
+  saveEnvironments,
+  type EnvironmentsConfig,
+} from '~/app/environments'
+import { ATTACHMENTS } from '@markdown-viewer/core/environments'
 import { FilesPanel } from './FilesPanel'
 import {
   getVault,
+  inVault,
   setVault,
   spaceOfTab,
   spacesOf,
@@ -184,7 +207,75 @@ export function App() {
   useEffect(() => {
     void startSync()
   }, [])
-  const [folderIcons, setFolderIcons] = useState<Record<string, string>>({})
+  // The icons of each open base, by path, and the same by entry id for the tree.
+  const [iconMaps, setIconMaps] = useState<Record<string, IconMap>>({})
+  const folderIcons = useMemo(() => {
+    const out: Record<string, string> = {}
+    for (const [baseId, icons] of Object.entries(iconMaps)) {
+      for (const [path, icon] of Object.entries(icons)) out[entryId(baseId, path)] = icon
+    }
+    return out
+  }, [iconMaps])
+  const latestIcons = useRef(iconMaps)
+  useEffect(() => {
+    latestIcons.current = iconMaps
+  })
+  const [iconFor, setIconFor] = useState<Entry | null>(null)
+  // Which root folders of the vault are environments, and the colour of each.
+  const [envConfig, setEnvConfig] = useState<EnvironmentsConfig>({ skip: [], colors: {} })
+  const latestEnvConfig = useRef(envConfig)
+  useEffect(() => {
+    latestEnvConfig.current = envConfig
+  })
+  const changeEnvironments = useCallback(
+    (change: (config: EnvironmentsConfig) => EnvironmentsConfig) => {
+      const vaultId = getVault()
+      if (!vaultId) return
+      const next = change(latestEnvConfig.current)
+      if (next === latestEnvConfig.current) return
+      latestEnvConfig.current = next
+      setEnvConfig(next)
+      void saveEnvironments(vaultId, next).catch((error: unknown) =>
+        setNotice(error instanceof Error ? error.message : String(error)),
+      )
+    },
+    [],
+  )
+  // An environment's folder renamed keeps its colour, and stays set aside if it was.
+  useEffect(
+    () =>
+      onEntryMoved((baseId, from, to) => {
+        if (baseId !== getVault() || from.includes('/') || to.includes('/')) return
+        changeEnvironments((config) => {
+          if (!(from in config.colors) && !config.skip.includes(from)) return config
+          const { [from]: color, ...colors } = config.colors
+          return {
+            skip: config.skip.map((one) => (one === from ? to : one)),
+            colors: color ? { ...colors, [to]: color } : colors,
+          }
+        })
+      }),
+    [changeEnvironments],
+  )
+  /** Changes the icons of a base and writes them to the vault's own file. */
+  const changeIcons = useCallback((baseId: string, change: (icons: IconMap) => IconMap) => {
+    const before = latestIcons.current[baseId] ?? {}
+    const after = change(before)
+    if (after === before) return
+    latestIcons.current = { ...latestIcons.current, [baseId]: after }
+    setIconMaps(latestIcons.current)
+    void saveFolderIcons(baseId, after).catch((error: unknown) =>
+      setNotice(error instanceof Error ? error.message : String(error)),
+    )
+  }, [])
+  // A folder renamed or moved takes its icon along, and those of what is inside.
+  useEffect(
+    () =>
+      onEntryMoved((baseId, from, to) =>
+        changeIcons(baseId, (icons) => iconsAfterMove(icons, from, to)),
+      ),
+    [changeIcons],
+  )
   const [bookmarks, setBookmarks] = useState<Bookmark[]>([])
   const [searchOpen, setSearchOpen] = useState(false)
   const [measuring, setMeasuring] = useState(false)
@@ -288,7 +379,8 @@ export function App() {
   useEffect(() => {
     let cancelled = false
     void Promise.all(state.bases.map((base) => readFolderIcons(base.id))).then((maps) => {
-      if (!cancelled) setFolderIcons(Object.assign({}, ...maps))
+      if (cancelled) return
+      setIconMaps(Object.fromEntries(state.bases.map((base, i) => [base.id, maps[i]!])))
     })
     void Promise.all(state.bases.map((base) => readBookmarks(base.id))).then((lists) => {
       if (!cancelled) setBookmarks(lists.flat())
@@ -419,6 +511,34 @@ export function App() {
           separated: folder,
           onSelect: () => setRenamingId(entry.id),
         },
+        { label: 'Ícone…', onSelect: () => setIconFor(entry) },
+        // A folder at the root of the vault is an environment unless set aside.
+        ...(folder &&
+        entry.baseId === getVault() &&
+        !entry.path.includes('/') &&
+        !entry.name.startsWith('.') &&
+        !entry.name.startsWith('_') &&
+        entry.name !== ATTACHMENTS
+          ? [
+              latestEnvConfig.current.skip.includes(entry.name)
+                ? {
+                    label: 'Usar como ambiente',
+                    onSelect: () =>
+                      changeEnvironments((config) => ({
+                        ...config,
+                        skip: config.skip.filter((one) => one !== entry.name),
+                      })),
+                  }
+                : {
+                    label: 'Não é um ambiente',
+                    onSelect: () =>
+                      changeEnvironments((config) => ({
+                        ...config,
+                        skip: [...config.skip, entry.name],
+                      })),
+                  },
+            ]
+          : []),
         {
           label: 'Copiar caminho relativo',
           separated: true,
@@ -565,6 +685,33 @@ export function App() {
     if (sync.config?.folder) setVault(sync.config.folder)
     else if (state.bases.length === 1) setVault(state.bases[0]!.id)
   }, [vault, sync.config, state.bases])
+  // ---- environments: the folders at the root of the vault ----
+  const vaultOpen = !!vault && state.bases.some((base) => base.id === vault)
+  useEffect(() => {
+    if (!vault || !vaultOpen) return
+    let cancelled = false
+    void readEnvironments(vault).then((config) => {
+      if (!cancelled) setEnvConfig(config)
+    })
+    return () => {
+      cancelled = true
+    }
+  }, [vault, vaultOpen])
+  const vaultRoots = vault ? state.children[entryId(vault, '')] : undefined
+  const [knownEnvs, setKnownEnvs] = useState(knownEnvironments)
+  // Until the root of the vault has been read, the ones of the last run stand.
+  const environments = useMemo(() => {
+    if (!vault) return []
+    if (!vaultRoots) return knownEnvs
+    return environmentsOf(vaultRoots, envConfig)
+  }, [vault, vaultRoots, envConfig, knownEnvs])
+  useEffect(() => {
+    if (!vaultRoots) return
+    if (environments.join('\n') === knownEnvs.join('\n')) return
+    rememberEnvironments(environments)
+    setKnownEnvs(environments)
+  }, [vaultRoots, environments, knownEnvs])
+
   const [activeSpace, setActiveSpace] = useState<SpaceId>(() => {
     try {
       return (localStorage.getItem('markdown-viewer.space') as SpaceId | null) ?? 'vault'
@@ -573,28 +720,50 @@ export function App() {
     }
   })
   const spaces = useMemo(
-    () => spacesOf(state.bases, state.tabs, vault),
-    [state.bases, state.tabs, vault],
+    () => spacesOf(state.bases, state.tabs, vault, environments),
+    [state.bases, state.tabs, vault, environments],
   )
   const space: Space = spaces.find((one) => one.id === activeSpace) ?? spaces[0]!
   const visibleTabs = useMemo(
-    () => state.tabs.filter((tab) => spaceOfTab(tab, vault) === space.id),
-    [state.tabs, vault, space.id],
+    () => state.tabs.filter((tab) => spaceOfTab(tab, vault, environments) === space.id),
+    [state.tabs, vault, environments, space.id],
   )
   const tabCounts = useMemo(() => {
     const counts: Partial<Record<SpaceId, number>> = {}
     for (const tab of state.tabs) {
-      const id = spaceOfTab(tab, vault)
+      const id = spaceOfTab(tab, vault, environments)
       counts[id] = (counts[id] ?? 0) + 1
     }
     return counts
-  }, [state.tabs, vault])
-  const spaceIndexes = useMemo(
+  }, [state.tabs, vault, environments])
+  // Search and quick open look at the space in use: in an environment, at its
+  // own notes. Links are resolved against the whole vault, elsewhere.
+  const spaceIndexes = useMemo(() => {
+    const index = space.baseId ? state.index[space.baseId] : undefined
+    if (!space.baseId || !index) return {}
+    return { [space.baseId]: space.root ? indexUnder(index, space.root) : index }
+  }, [space.baseId, space.root, state.index])
+  const environmentItems: EnvironmentItem[] = useMemo(
     () =>
-      space.baseId && state.index[space.baseId]
-        ? { [space.baseId]: state.index[space.baseId]! }
-        : {},
-    [space.baseId, state.index],
+      vault
+        ? environments.map((folder) => ({
+            folder,
+            icon: folderIcons[entryId(vault, folder)] ?? null,
+            accent: colorOf(envConfig, folder),
+            tabs: tabCounts[`env:${folder}`] ?? 0,
+          }))
+        : [],
+    [vault, environments, folderIcons, envConfig, tabCounts],
+  )
+  // The favourites of the space in use: in an environment, the ones inside it.
+  const spaceBookmarks = useMemo(
+    () =>
+      bookmarks.filter(
+        (bookmark) =>
+          bookmark.baseId === space.baseId &&
+          (!space.root || bookmark.path.startsWith(space.root + '/')),
+      ),
+    [bookmarks, space.baseId, space.root],
   )
   const lastActive = useRef<Partial<Record<SpaceId, string | null>>>({})
   const rememberSpace = (id: SpaceId) => {
@@ -621,34 +790,81 @@ export function App() {
       settled.current = true
       const asked = state.tabs.find((tab) => tab.id === state.askedOnRestore)
       if (asked) {
-        rememberSpace(spaceOfTab(asked, vault))
+        rememberSpace(spaceOfTab(asked, vault, environments))
         return
       }
       if (spaces.some((one) => one.id === activeSpace)) {
-        if (activeTab && spaceOfTab(activeTab, vault) === activeSpace) return
-        const there = state.tabs.filter((tab) => spaceOfTab(tab, vault) === activeSpace)
+        if (activeTab && spaceOfTab(activeTab, vault, environments) === activeSpace) return
+        const there = state.tabs.filter(
+          (tab) => spaceOfTab(tab, vault, environments) === activeSpace,
+        )
         actions.activateTab(there[there.length - 1]?.id ?? null)
         return
       }
     }
     if (!activeTab) return
-    const id = spaceOfTab(activeTab, vault)
+    const id = spaceOfTab(activeTab, vault, environments)
     if (id !== space.id) rememberSpace(id)
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [state.activeId, vault, state.restored])
+  }, [state.activeId, vault, state.restored, environments])
   const switchSpace = (id: SpaceId) => {
     if (id === space.id) return
     lastActive.current[space.id] = state.activeId
     rememberSpace(id)
-    const there = state.tabs.filter((tab) => spaceOfTab(tab, vault) === id)
+    const there = state.tabs.filter((tab) => spaceOfTab(tab, vault, environments) === id)
     const target =
       there.find((tab) => tab.id === lastActive.current[id]) ?? there[there.length - 1] ?? null
     actions.activateTab(target?.id ?? null)
   }
-  const spaceRef = useRef({ id: space.id, vault, baseId: space.baseId })
-  useEffect(() => {
-    spaceRef.current = { id: space.id, vault, baseId: space.baseId }
+  const spaceRef = useRef({
+    id: space.id,
+    vault,
+    baseId: space.baseId,
+    root: space.root,
+    environments,
   })
+  useEffect(() => {
+    spaceRef.current = { id: space.id, vault, baseId: space.baseId, root: space.root, environments }
+  })
+
+  // An environment's tree starts at its folder, which has to be read first.
+  useEffect(() => {
+    if (space.kind === 'env' && space.baseId) void actions.expandFolder(space.baseId, space.root)
+  }, [space.kind, space.baseId, space.root, actions])
+
+  // The vault's pill in the strip stands for whatever part of it was in use last.
+  const lastVaultSpace = useRef<SpaceId>('vault')
+  useEffect(() => {
+    if (inVault(space)) lastVaultSpace.current = space.id
+  })
+
+  // The colour of the environment in use tints the app's accent.
+  const accent = space.kind === 'env' ? colorOf(envConfig, space.root) : null
+  useEffect(() => {
+    const root = document.documentElement
+    if (!accent || accent.id === 'red') {
+      delete root.dataset.accent
+      return
+    }
+    root.dataset.accent = accent.id
+    root.style.setProperty('--env-accent-dark', accent.dark)
+    root.style.setProperty('--env-accent-light', accent.light)
+  }, [accent])
+
+  // Alt+1 to Alt+9: the environments, in the order of the list.
+  useEffect(() => {
+    const onKey = (event: KeyboardEvent) => {
+      if (!event.altKey || event.ctrlKey || event.metaKey || event.shiftKey) return
+      const digit = /^Digit([1-9])$/.exec(event.code)?.[1]
+      if (!digit) return
+      const folder = spaceRef.current.environments[Number(digit) - 1]
+      if (!folder) return
+      event.preventDefault()
+      latestSwitch.current(`env:${folder}`)
+    }
+    window.addEventListener('keydown', onKey, true)
+    return () => window.removeEventListener('keydown', onKey, true)
+  }, [])
 
   /**
    * A folder just opened, from the "+", the menu, Ctrl+O or the recents, is
@@ -679,8 +895,13 @@ export function App() {
       return
     }
     const tab = latestTab.current
-    const current = tab && tab.baseId === baseId && tab.path ? parentPath(tab.path) : ''
-    const folder = await newFileFolder(baseId, current)
+    const root = spaceRef.current.root
+    const inside = (path: string) => !root || path === root || path.startsWith(root + '/')
+    const current =
+      tab && tab.baseId === baseId && tab.path && inside(tab.path) ? parentPath(tab.path) : root
+    // What the vault's settings say, unless that is outside the environment in use.
+    const wanted = await newFileFolder(baseId, current)
+    const folder = inside(wanted) ? wanted : root
     await actions.revealPath(baseId, folder ? folder + '/x' : '')
     await createIn(baseId, folder, 'file')
   }, [actions, createIn])
@@ -1171,7 +1392,9 @@ export function App() {
     (delta: number) => {
       const { activeId } = latestState.current
       const tabs = latestState.current.tabs.filter(
-        (tab: Tab) => spaceOfTab(tab, spaceRef.current.vault) === spaceRef.current.id,
+        (tab: Tab) =>
+          spaceOfTab(tab, spaceRef.current.vault, spaceRef.current.environments) ===
+          spaceRef.current.id,
       )
       if (tabs.length === 0) return
       const at = tabs.findIndex((tab: Tab) => tab.id === activeId)
@@ -1464,11 +1687,17 @@ export function App() {
           <span className="brand-name">markdown-viewer</span>
         </div>
         <SpaceStrip
-          spaces={spaces}
-          active={space.id}
+          spaces={spaces.filter((one) => one.kind !== 'env')}
+          active={inVault(space) ? 'vault' : space.id}
           counts={tabCounts}
           syncStatus={sync.status}
-          onSelect={switchSpace}
+          onSelect={(id) =>
+            switchSpace(
+              id === 'vault' && spaces.some((one) => one.id === lastVaultSpace.current)
+                ? lastVaultSpace.current
+                : id,
+            )
+          }
           onClose={(closing) => {
             if (closing.baseId && actions.closeBase(closing.baseId)) switchSpace('vault')
           }}
@@ -1483,6 +1712,23 @@ export function App() {
             })
           }
         />
+
+        {inVault(space) && space.baseId && environmentItems.length > 0 && (
+          <EnvironmentSwitcher
+            environments={environmentItems}
+            active={space.kind === 'env' ? space.root : null}
+            vaultName={spaces[0]!.name}
+            vaultTabs={tabCounts.vault ?? 0}
+            shortcut={(index) => (index < 9 ? `Alt+${index + 1}` : null)}
+            onSelect={(folder) => switchSpace(folder ? `env:${folder}` : 'vault')}
+            onColor={(folder, picked) =>
+              changeEnvironments((config) => ({
+                ...config,
+                colors: { ...config.colors, [folder]: picked.id },
+              }))
+            }
+          />
+        )}
 
         {/* Inside a folder the work is the tree, as in Obsidian; opening another
             folder or a loose file is the "+" of the spaces. These are for
@@ -1512,10 +1758,10 @@ export function App() {
           </div>
         )}
 
-        {bookmarks.length > 0 && (
+        {spaceBookmarks.length > 0 && (
           <div className="bookmarks">
             <p className="bookmarks-title">Favoritos</p>
-            {bookmarks.map((bookmark) => (
+            {spaceBookmarks.map((bookmark) => (
               <button
                 key={bookmark.baseId + bookmark.path}
                 type="button"
@@ -1589,7 +1835,7 @@ export function App() {
                 key={base.id}
                 // Dropped on the empty space of a base: to its root.
                 onDragOver={(event) => {
-                  if (!canDrop(draggedEntry(), base.id, '')) return
+                  if (!canDrop(draggedEntry(), base.id, space.root)) return
                   event.preventDefault()
                   event.dataTransfer.dropEffect = 'move'
                   event.currentTarget.classList.add('is-drop-target')
@@ -1603,7 +1849,8 @@ export function App() {
                   event.preventDefault()
                   event.currentTarget.classList.remove('is-drop-target')
                   const moving = draggedEntry()
-                  if (canDrop(moving, base.id, '')) void actions.moveEntry(moving, '')
+                  if (canDrop(moving, base.id, space.root))
+                    void actions.moveEntry(moving, space.root)
                 }}
               >
                 {/* The bar of Obsidian's file explorer: new note, new folder, the
@@ -1623,7 +1870,7 @@ export function App() {
                     className="icon-button is-small"
                     aria-label="Nova pasta"
                     title="Nova pasta"
-                    onClick={() => void createIn(base.id, '', 'folder')}
+                    onClick={() => void createIn(base.id, space.root, 'folder')}
                   >
                     <FolderPlusIcon size={17} />
                   </button>
@@ -1660,7 +1907,7 @@ export function App() {
                 </div>
                 <FileTree
                   data={treeData}
-                  parentId={entryId(base.id, '')}
+                  parentId={entryId(base.id, space.root)}
                   depth={0}
                   showAllFiles={settings.showAllFiles}
                   showHidden={settings.showHidden}
@@ -1954,9 +2201,9 @@ export function App() {
         ) : (
           <EmptyState
             hasBase={!!space.baseId || space.kind === 'files'}
-            vaultMissing={space.kind === 'vault' && !space.baseId}
+            vaultMissing={inVault(space) && !space.baseId}
             onOpenBase={() =>
-              void (space.kind === 'vault' && !space.baseId
+              void (inVault(space) && !space.baseId
                 ? chooseVault()
                 : openFolder(actions.openBase()))
             }
@@ -2052,6 +2299,24 @@ export function App() {
             void addNoteComment(baseId, path, { ...rest, comment }).catch((error: unknown) =>
               setNotice(error instanceof Error ? error.message : String(error)),
             )
+          }}
+        />
+      )}
+
+      {iconFor && (
+        <IconPicker
+          name={iconFor.name}
+          current={iconMaps[iconFor.baseId]?.[iconFor.path] ?? null}
+          onClose={() => setIconFor(null)}
+          onPick={(icon) => {
+            const { baseId, path } = iconFor
+            setIconFor(null)
+            changeIcons(baseId, (icons) => {
+              if (icon) return icons[path] === icon ? icons : { ...icons, [path]: icon }
+              if (!(path in icons)) return icons
+              const { [path]: _gone, ...rest } = icons
+              return rest
+            })
           }}
         />
       )}

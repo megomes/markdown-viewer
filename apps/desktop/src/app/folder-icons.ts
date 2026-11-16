@@ -1,26 +1,39 @@
 /**
- * Folder icons from Iconize (`obsidian-icon-folder`), so the tree looks the way
- * it looked in Obsidian. The plugin keeps `path: "LiPlane"` pairs in its data
- * file; `Li` names are Lucide icons, anything else is an emoji.
+ * The icons of folders and files of a base: read from the app's own file, or
+ * from Iconize's while the app has none, and written to the app's own when one
+ * is chosen here (`@markdown-viewer/core/icons` says why).
  */
 
-import { entryId } from '@markdown-viewer/core/fs'
+import {
+  ICONIZE_FILE,
+  ICONS_FILE,
+  parseIconize,
+  parseIcons,
+  serializeIcons,
+  type IconMap,
+} from '@markdown-viewer/core/icons'
 import { fileSystem } from '~/platform'
 
-const DATA = '.obsidian/plugins/obsidian-icon-folder/data.json'
-
-/** Entry id to icon name, for one base. Empty when the plugin is not there. */
-export async function readFolderIcons(baseId: string): Promise<Record<string, string>> {
+async function text(baseId: string, path: string): Promise<string | null> {
   try {
-    const { text } = await fileSystem().read(baseId, DATA)
-    const data = JSON.parse(text) as Record<string, unknown>
-    const out: Record<string, string> = {}
-    for (const [path, icon] of Object.entries(data)) {
-      if (path === 'settings' || typeof icon !== 'string' || !icon) continue
-      out[entryId(baseId, path)] = icon
-    }
-    return out
+    return (await fileSystem().read(baseId, path)).text
   } catch {
-    return {}
+    return null
   }
+}
+
+/** Path to icon name, for one base. Empty when the base has no icons at all. */
+export async function readFolderIcons(baseId: string): Promise<IconMap> {
+  const own = await text(baseId, ICONS_FILE)
+  const icons = own === null ? null : parseIcons(own)
+  if (icons) return icons
+  const iconize = await text(baseId, ICONIZE_FILE)
+  return iconize === null ? {} : parseIconize(iconize)
+}
+
+/** Writes the whole map to the app's own file, which from then on is the one read. */
+export async function saveFolderIcons(baseId: string, icons: IconMap): Promise<void> {
+  const files = fileSystem()
+  await files.createFolder(baseId, '.markdown-viewer').catch(() => {})
+  await files.write(baseId, ICONS_FILE, new TextEncoder().encode(serializeIcons(icons)))
 }

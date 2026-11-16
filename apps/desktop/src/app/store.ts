@@ -450,6 +450,23 @@ export function reducer(state: State, action: Action): State {
   }
 }
 
+type MoveListener = (baseId: string, from: string, to: string) => void
+const moveListeners = new Set<MoveListener>()
+
+/**
+ * Told each time a file or a folder went from one path to another, renamed or
+ * moved, here or from a note's own title. For what is kept by path outside the
+ * workspace: the icons.
+ */
+export function onEntryMoved(listener: MoveListener): () => void {
+  moveListeners.add(listener)
+  return () => moveListeners.delete(listener)
+}
+
+function entryMoved(baseId: string, from: string, to: string): void {
+  for (const listener of moveListeners) listener(baseId, from, to)
+}
+
 export function useWorkspace() {
   const [state, dispatch] = useReducer(reducer, initialState)
 
@@ -781,6 +798,7 @@ export function useWorkspace() {
       try {
         await fileSystem().move(entry.baseId, entry.path, target)
         dispatch({ type: 'entry/moved', baseId: entry.baseId, from: entry.path, to: target })
+        entryMoved(entry.baseId, entry.path, target)
         await loadChildren(entry.baseId, parent)
         await afterMove.current(entry.baseId, entry.path, target)
       } catch (error) {
@@ -859,6 +877,7 @@ export function useWorkspace() {
         }
         await files.move(tab.baseId, tab.path, target)
         dispatch({ type: 'entry/moved', baseId: tab.baseId, from: tab.path, to: target })
+        entryMoved(tab.baseId, tab.path, target)
         void afterMove.current(tab.baseId, tab.path, target)
         await loadChildren(tab.baseId, parent)
         return { ok: true, id: entryId(tab.baseId, target), name: fileName, path: target }
@@ -1181,6 +1200,7 @@ export function useWorkspace() {
         }
         await fileSystem().move(entry.baseId, entry.path, target)
         dispatch({ type: 'entry/moved', baseId: entry.baseId, from: entry.path, to: target })
+        entryMoved(entry.baseId, entry.path, target)
         await loadChildren(entry.baseId, from)
         await loadChildren(entry.baseId, folder)
         await updateLinksAfterMove(entry.baseId, entry.path, target)

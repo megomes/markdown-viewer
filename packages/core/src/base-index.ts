@@ -95,6 +95,34 @@ async function collect(
   }
 }
 
+const scoped = new WeakMap<BaseIndex, Map<string, BaseIndex>>()
+
+/**
+ * The part of an index that is under one folder: what search and quick open
+ * look at inside an environment. Links are never resolved against it, they see
+ * the whole base. The same index and folder give the same object back, so what
+ * is computed from it is not computed again.
+ */
+export function indexUnder(index: BaseIndex, folder: string): BaseIndex {
+  if (!folder) return index
+  let known = scoped.get(index)
+  if (!known) scoped.set(index, (known = new Map()))
+  const ready = known.get(folder)
+  if (ready) return ready
+  const prefix = folder + '/'
+  const files: BaseIndex['files'] = {}
+  for (const [id, file] of Object.entries(index.files)) {
+    if (file.path.startsWith(prefix)) files[id] = file
+  }
+  const part: BaseIndex = {
+    ...index,
+    files,
+    paths: index.paths.filter((path) => path.startsWith(prefix)),
+  }
+  known.set(folder, part)
+  return part
+}
+
 const resolvers = new WeakMap<BaseIndex, Resolver>()
 
 /** The link resolver for an index, built once per finished index. */

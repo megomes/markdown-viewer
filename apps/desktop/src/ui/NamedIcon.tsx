@@ -5,16 +5,17 @@
  * whole set.
  */
 
-import { DynamicIcon, type IconName } from 'lucide-react/dynamic'
+import { DynamicIcon, iconNames, type IconName } from 'lucide-react/dynamic'
+import { iconizeName, lucideName as guessed } from '@markdown-viewer/core/icons'
+
+/** Every Lucide icon by the name Iconize gives it: exact, where a rule could miss. */
+let known: Map<string, string> | null = null
 
 /** `LiBookOpen` to `book-open`, `LiPlane` to `plane`. */
 export function lucideName(name: string): string | null {
   if (!name.startsWith('Li')) return null
-  return name
-    .slice(2)
-    .replace(/([a-z0-9])([A-Z])/g, '$1-$2')
-    .replace(/([A-Z])([A-Z][a-z])/g, '$1-$2')
-    .toLowerCase()
+  known ??= new Map((iconNames as string[]).map((icon) => [iconizeName(icon), icon]))
+  return known.get(name) ?? guessed(name)
 }
 
 export function NamedIcon({ name, className }: { name: string; className?: string }) {
