@@ -37,13 +37,14 @@ import {
   relocate,
   removePath,
   syncNow,
+  togglePin,
   useVault,
   type TreeNode,
 } from '../vault/runtime'
 import { useUpdates } from '../updates/updater'
 import { colors, radius } from '../ui/theme'
 import { hasVaultIcon, VaultIcon } from '../ui/VaultIcon'
-import { ChevronRight, FileText, Folder, LayoutGrid } from 'lucide-react-native'
+import { ChevronRight, FileText, Folder, LayoutGrid, Pin } from 'lucide-react-native'
 import { accentOf } from '@markdown-viewer/core/environments'
 import { isAttachmentsFolder } from '@markdown-viewer/core/attachments'
 import { viewerOf } from '@markdown-viewer/core/fs'
@@ -364,6 +365,9 @@ export default function Files() {
             >
               {item.kind === 'file' ? item.name.replace(/\.md$/i, '') : item.name}
             </Text>
+            {item.fileId && vault.pins.includes(item.fileId) ? (
+              <Pin size={14} color={accent} strokeWidth={1.75} />
+            ) : null}
             {item.kind === 'file' && item.pending ? (
               <Text style={styles.meta}>esperando envio</Text>
             ) : item.kind === 'file' && !item.local ? (
@@ -393,6 +397,22 @@ export default function Files() {
                 <Text style={styles.sheetTitle} numberOfLines={1}>
                   {dialog.node.name}
                 </Text>
+                {dialog.node.kind === 'file' &&
+                dialog.node.fileId &&
+                NOTE.test(dialog.node.name) ? (
+                  <SheetButton
+                    label={
+                      vault.pins.includes(dialog.node.fileId)
+                        ? 'Tirar do widget'
+                        : 'Fixar no widget'
+                    }
+                    onPress={() => {
+                      const id = dialog.node.fileId!
+                      close()
+                      void togglePin(id)
+                    }}
+                  />
+                ) : null}
                 <SheetButton label="Renomear" onPress={() => startRename(dialog.node)} />
                 <SheetButton
                   label="Mover para…"

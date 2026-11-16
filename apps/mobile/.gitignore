@@ -43,3 +43,6 @@ yarn-error.*
 # Native projects are generated (Continuous Native Generation)
 /android
 /ios
+
+# Local native modules: what Gradle builds
+/modules/*/android/build/

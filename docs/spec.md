@@ -142,6 +142,35 @@ O critério é simples: toda nota que abre certa no Obsidian abre certa aqui.
 Teste de aceite: um script percorre o vault inteiro e lista link, embed e alias que não
 resolvem. O número tem que ser igual ao que já está quebrado no Obsidian.
 
+### 6.1b Ambientes, ícones, anexos e a árvore (2026-11-16)
+
+Pedidos do Matheus depois de olhar o vault de verdade (`Personal Notes` e `Reasset Notes`
+como raízes, três pastas `Files`, projetos da Reasset cheios de código e dados).
+
+- **Ambientes.** Cada pasta da raiz do vault é um ambiente, menos as ocultas, as que
+  começam com `_`, a `Files` e as que a pessoa puser de lado ("Não é um ambiente", no menu
+  da pasta). Um ambiente tem as suas abas, a árvore começa na pasta dele, a busca e o
+  abrir rápido olham só para ele, e a cor dele tinge o destaque do app. Os links seguem
+  resolvidos contra o vault inteiro: é um vault só e um sync só, ambiente é uma visão. No
+  desktop o seletor fica no topo da barra lateral (Alt+1 a Alt+9); no celular a primeira
+  tela abre com um cartão por ambiente.
+- **Onde fica guardado.** `.markdown-viewer/environments.json` (pastas postas de lado e a
+  cor de cada ambiente) e `.markdown-viewer/icons.json` (caminho para nome de ícone),
+  dentro do vault, para o sync levar a todos os aparelhos.
+- **Ícones.** Escolhidos no desktop (menu da árvore, "Ícone…"): qualquer ícone do Lucide,
+  com busca em português para as palavras do dia a dia, ou um emoji. O arquivo do app nasce
+  como cópia do que o Iconize tinha e passa a ser o que vale. Renomear ou mover leva o
+  ícone junto. O celular mostra os mesmos ícones; escolher fica no desktop.
+- **Anexos.** Uma `Files` por ambiente (e a da raiz para a nota que não está em nenhum).
+  Imagem colada no desktop ou foto tirada no celular vai para lá com o nome da nota e um
+  número (`Reunião 01.png`), e entra na nota como `![[nome]]`. A árvore não mostra as
+  pastas `Files`; quem mostra os anexos é a nota, na aba Anexos do painel lateral. O que já
+  estava espalhado não é movido.
+- **A árvore mostra o que se escreve.** Notas, HTML e Bases. O resto de cada pasta
+  (imagens, PDFs, código, dados) fica numa linha "mais N arquivos", que abre só aquela
+  pasta. Arquivos e pastas ocultos (`.claude`, `.obsidian`) aparecem, com um ajuste para
+  escondê-los, e continuam fora do índice, da busca e dos links.
+
 ### 6.2 HTML
 
 - **Visualização dentro do app**, num frame isolado do resto do app. Carrega CSS, imagem
@@ -374,6 +403,15 @@ Celular e tablet. Nasceu só de leitura; desde 2026-11-15 também edita e cria n
 - Feedback do app (seção 6.9).
 - Funciona offline com o que já foi baixado.
 - No tablet, árvore e nota lado a lado.
+- **Captura rápida** (2026-11-16). "Compartilhar" de qualquer app (página, texto, imagens)
+  abre uma nota pronta para salvar: a página vira um link com o título dela, a imagem vira
+  anexo. Vai para a pasta de captura, que por padrão é o `Backlog` mais perto da raiz e
+  pode ser trocada na própria tela. O nome vem do título, do assunto ou da primeira linha.
+- **Widget** na tela inicial, no espírito do Google Keep: uma linha para escrever uma nota
+  e, embaixo, as notas fixadas ("Fixar no widget", no toque longo), cada uma com o começo
+  do texto e a cor do ambiente. Sem nada fixado, mostra as escritas por último. Os fixados
+  ficam no aparelho, não no vault. O widget e o compartilhar são o módulo nativo
+  `apps/mobile/modules/quick-capture` (Kotlin); o resto é o app.
 
 **Como é feito** (decidido em 2026-11-15, ao começar a etapa 8):
 
@@ -713,6 +751,14 @@ novo sem parear outra vez.
 
 Cada item ganha spec própria quando chegar a vez: edição no mobile, widgets, Galaxy
 Watch, tarefas e lembretes, Claude no celular pela ponte do desktop, Bases com edição.
+
+Ideias anotadas, sem data:
+
+- **Página de projeto.** As pastas `AAAA-MM-DD - Nome`, com a nota `_project` e as fases
+  numeradas, abrindo como um painel: fases, tarefas abertas, reuniões e decisões ligadas.
+- **Faxina de anexos.** Uma tela que lista os arquivos das pastas `Files` que nenhuma nota
+  usa, para mandar para a lixeira.
+- **Ambientes por aparelho.** Escolher quais ambientes o celular ou o tablet baixa.
 
 ## 11. Em aberto
 

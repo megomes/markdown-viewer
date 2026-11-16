@@ -2,7 +2,7 @@
   "expo": {
     "name": "markdown-viewer",
     "slug": "markdown-viewer",
-    "version": "0.11.0",
+    "version": "0.12.0",
     "scheme": "markdown-viewer",
     "orientation": "default",
     "icon": "./assets/icon.png",
@@ -15,7 +15,36 @@
         "foregroundImage": "./assets/adaptive-icon.png"
       },
       "predictiveBackGestureEnabled": false,
-      "permissions": ["android.permission.REQUEST_INSTALL_PACKAGES"]
+      "permissions": ["android.permission.REQUEST_INSTALL_PACKAGES"],
+      "intentFilters": [
+        {
+          "action": "SEND",
+          "category": ["DEFAULT"],
+          "data": [
+            {
+              "mimeType": "text/plain"
+            }
+          ]
+        },
+        {
+          "action": "SEND",
+          "category": ["DEFAULT"],
+          "data": [
+            {
+              "mimeType": "image/*"
+            }
+          ]
+        },
+        {
+          "action": "SEND_MULTIPLE",
+          "category": ["DEFAULT"],
+          "data": [
+            {
+              "mimeType": "image/*"
+            }
+          ]
+        }
+      ]
     },
     "plugins": [
       "expo-router",

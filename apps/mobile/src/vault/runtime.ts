@@ -556,10 +556,14 @@ async function publishWidget(): Promise<void> {
       snippets.set(file.fileId, known)
     }
     const environment = environmentOf(file.path, snapshot.environments)
+    const title = nameOf(file.path).replace(/\.(md|markdown)$/i, '')
+    // A note that opens with its own name as a heading does not say it twice.
+    const lines = known.text.split('\n')
+    const same = (line: string) => line.trim().toLowerCase() === title.trim().toLowerCase()
     notes.push({
       id: file.fileId,
-      title: nameOf(file.path).replace(/\.(md|markdown)$/i, ''),
-      text: known.text,
+      title,
+      text: (lines.length > 0 && same(lines[0]!) ? lines.slice(1) : lines).join('\n'),
       color: environment ? accentOf(snapshot.environmentColors[environment]).dark : '',
     })
   }

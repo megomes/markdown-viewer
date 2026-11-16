@@ -250,7 +250,9 @@ export default function Note() {
     <View style={[styles.screen, { paddingBottom: keyboard > 0 ? keyboard : insets.bottom }]}>
       <Stack.Screen options={{ title, headerRight: isNote && file ? headerRight : undefined }} />
       {saveError ? <Text style={styles.saveError}>Não deu para salvar: {saveError}</Text> : null}
-      {!file && vault.phase === 'ready' ? (
+      {vault.phase === 'loading' ? (
+        <ActivityIndicator style={styles.loading} color={colors.textSecondary} />
+      ) : !file && vault.phase === 'ready' ? (
         <Text style={styles.message}>
           {name
             ? `"${name}" não está mais no vault: foi apagada ou substituída em outro aparelho.`
