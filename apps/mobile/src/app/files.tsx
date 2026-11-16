@@ -4,6 +4,11 @@
  *
  * The round button makes a note here. Holding a row offers what the desktop's
  * right click does: rename, move, delete.
+ *
+ * As on the desktop, the list shows what is written (notes, HTML, Bases) and
+ * gathers the rest of the folder in one line; attachments folders and hidden
+ * ones stay behind that line too. The first screen opens with the environments,
+ * each with its icon and colour.
  */
 
 import { useMemo, useState } from 'react'
@@ -24,6 +29,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import {
   allFolders,
   childrenOf,
+  environmentOf,
   createFolder,
   createNote,
   dismissNotice,
@@ -36,6 +42,11 @@ import {
 } from '../vault/runtime'
 import { useUpdates } from '../updates/updater'
 import { colors, radius } from '../ui/theme'
+import { hasVaultIcon, VaultIcon } from '../ui/VaultIcon'
+import { ChevronRight, FileText, Folder, LayoutGrid } from 'lucide-react-native'
+import { accentOf } from '@markdown-viewer/core/environments'
+import { isAttachmentsFolder } from '@markdown-viewer/core/attachments'
+import { viewerOf } from '@markdown-viewer/core/fs'
 
 function sizeLabel(bytes: number): string {
   if (bytes < 1024) return `${bytes} B`
@@ -49,6 +60,20 @@ function timeLabel(at: number): string {
 }
 
 const NOTE = /\.(md|markdown)$/i
+
+/** What the person writes, as on the desktop's tree: notes, HTML pages and Bases. */
+function isWritten(name: string): boolean {
+  const viewer = viewerOf(name)
+  return viewer === 'note' || viewer === 'html' || viewer === 'base'
+}
+
+/** Kept behind the "mais N" line: material around the notes, not the notes. */
+function isAside(node: TreeNode): boolean {
+  if (node.name.startsWith('.')) return true
+  if (node.kind === 'directory') return isAttachmentsFolder(node.path)
+  return !isWritten(node.name)
+}
+
 const messageOf = (error: unknown) => (error instanceof Error ? error.message : String(error))
 
 type Dialog =
@@ -62,11 +87,28 @@ export default function Files() {
   const vault = useVault()
   const updates = useUpdates()
   const insets = useSafeAreaInsets()
-  const nodes = useMemo(
+  const all = useMemo(
     () => childrenOf(vault.files, folder, vault.folders),
     [vault.files, vault.folders, folder],
   )
+  // The rest of this folder, shown because its line was tapped.
+  const [everything, setEverything] = useState(false)
+  const environment = environmentOf(folder, vault.environments)
+  const accent = environment ? accentOf(vault.environmentColors[environment]).dark : colors.accent
+  // On the first screen the environments are cards of their own, above the rest.
+  const cards = folder ? [] : all.filter((node) => vault.environments.includes(node.path))
+  const rest = folder ? all : all.filter((node) => !vault.environments.includes(node.path))
+  const aside = rest.filter(isAside).length
+  const nodes = everything ? rest : rest.filter((node) => !isAside(node))
   const title = folder ? folder.slice(folder.lastIndexOf('/') + 1) : 'Vault'
+  const counts = useMemo(() => {
+    const out: Record<string, number> = {}
+    for (const file of vault.files) {
+      const root = file.path.split('/')[0]!
+      if (NOTE.test(file.path)) out[root] = (out[root] ?? 0) + 1
+    }
+    return out
+  }, [vault.files])
   const [dialog, setDialog] = useState<Dialog | null>(null)
   const [typed, setTyped] = useState('')
   const [problem, setProblem] = useState<string | null>(null)
@@ -226,6 +268,61 @@ export default function Files() {
         data={nodes}
         keyExtractor={(node) => node.path}
         contentContainerStyle={{ paddingBottom: 96 + insets.bottom }}
+        ListHeaderComponent={
+          cards.length > 0 ? (
+            <View style={styles.cards}>
+              {cards.map((card) => {
+                const tint = accentOf(vault.environmentColors[card.path]).dark
+                const icon = vault.icons[card.path]
+                const notes = counts[card.path] ?? 0
+                return (
+                  <Pressable
+                    key={card.path}
+                    onPress={() => open(card)}
+                    onLongPress={() => setDialog({ kind: 'actions', node: card })}
+                    delayLongPress={350}
+                    style={({ pressed }) => [styles.card, pressed && styles.rowPressed]}
+                  >
+                    <View style={[styles.cardTile, { backgroundColor: tint + '33' }]}>
+                      {hasVaultIcon(icon) ? (
+                        <VaultIcon name={icon} size={22} color={tint} />
+                      ) : (
+                        <LayoutGrid size={22} color={tint} strokeWidth={1.75} />
+                      )}
+                    </View>
+                    <View style={styles.cardText}>
+                      <Text style={styles.cardName} numberOfLines={1}>
+                        {card.name}
+                      </Text>
+                      <Text style={styles.meta}>{notes === 1 ? '1 nota' : `${notes} notas`}</Text>
+                    </View>
+                    <ChevronRight size={18} color={colors.textTertiary} strokeWidth={1.75} />
+                  </Pressable>
+                )
+              })}
+              {nodes.length > 0 || aside > 0 ? (
+                <Text style={styles.section}>Fora dos ambientes</Text>
+              ) : null}
+            </View>
+          ) : undefined
+        }
+        ListFooterComponent={
+          aside > 0 ? (
+            <Pressable
+              onPress={() => setEverything(!everything)}
+              style={({ pressed }) => [styles.row, pressed && styles.rowPressed]}
+            >
+              <View style={styles.icon} />
+              <Text style={styles.others}>
+                {everything
+                  ? 'mostrar só as notas'
+                  : aside === 1
+                    ? 'mais 1 item (anexos, PDFs, ocultos)'
+                    : `mais ${aside} itens (anexos, PDFs, ocultos)`}
+              </Text>
+            </Pressable>
+          ) : undefined
+        }
         refreshControl={
           <RefreshControl
             refreshing={vault.syncing}
@@ -236,9 +333,11 @@ export default function Files() {
           />
         }
         ListEmptyComponent={
-          <Text style={styles.empty}>
-            {vault.syncing ? 'Baixando o vault…' : 'Nada aqui ainda. O botão + cria uma nota.'}
-          </Text>
+          cards.length > 0 || aside > 0 ? undefined : (
+            <Text style={styles.empty}>
+              {vault.syncing ? 'Baixando o vault…' : 'Nada aqui ainda. O botão + cria uma nota.'}
+            </Text>
+          )
         }
         renderItem={({ item }) => (
           <Pressable
@@ -247,7 +346,18 @@ export default function Files() {
             delayLongPress={350}
             style={({ pressed }) => [styles.row, pressed && styles.rowPressed]}
           >
-            <Text style={styles.icon}>{item.kind === 'directory' ? '▸' : '·'}</Text>
+            <View style={styles.icon}>
+              {hasVaultIcon(vault.icons[item.path]) ? (
+                <VaultIcon
+                  name={vault.icons[item.path]!}
+                  color={item.kind === 'directory' ? accent : colors.textSecondary}
+                />
+              ) : item.kind === 'directory' ? (
+                <Folder size={18} color={accent} strokeWidth={1.75} />
+              ) : (
+                <FileText size={18} color={colors.textTertiary} strokeWidth={1.75} />
+              )}
+            </View>
             <Text
               style={[styles.name, item.kind === 'directory' && styles.folder]}
               numberOfLines={1}
@@ -267,7 +377,7 @@ export default function Files() {
         accessibilityLabel="Nova nota"
         style={({ pressed }) => [
           styles.fab,
-          { bottom: 24 + insets.bottom },
+          { bottom: 24 + insets.bottom, backgroundColor: accent },
           pressed && styles.fabPressed,
         ]}
       >
@@ -412,7 +522,36 @@ const styles = StyleSheet.create({
     borderBottomColor: colors.borderSubtle,
   },
   rowPressed: { backgroundColor: colors.surfaceHover },
-  icon: { color: colors.textTertiary, width: 12, fontSize: 15 },
+  icon: { width: 22, alignItems: 'center' },
+  others: { color: colors.textTertiary, fontSize: 14, flex: 1 },
+  cards: { paddingHorizontal: 16, paddingTop: 4, paddingBottom: 6, gap: 10 },
+  card: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 14,
+    padding: 14,
+    borderRadius: radius.lg,
+    backgroundColor: colors.surface1,
+    borderWidth: 1,
+    borderColor: colors.borderDefault,
+  },
+  cardTile: {
+    width: 44,
+    height: 44,
+    borderRadius: radius.md,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  cardText: { flex: 1, gap: 2 },
+  cardName: { color: colors.textPrimary, fontSize: 17, fontWeight: '600' },
+  section: {
+    color: colors.textTertiary,
+    fontSize: 12,
+    letterSpacing: 0.6,
+    textTransform: 'uppercase',
+    paddingHorizontal: 4,
+    paddingTop: 10,
+  },
   name: { color: colors.textPrimary, fontSize: 16, flex: 1 },
   folder: { fontWeight: '600' },
   meta: { color: colors.textTertiary, fontSize: 12 },

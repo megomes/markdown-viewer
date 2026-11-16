@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+  <string name="quick_capture_widget_name">Notas</string>
+  <string name="quick_capture_widget_description">Notas fixadas e captura rápida</string>
+  <string name="quick_capture_new">Nova nota</string>
+  <string name="quick_capture_empty">Fixe uma nota no app para ela aparecer aqui.</string>
+  <string name="quick_capture_hint">Escrever uma nota…</string>
+</resources>

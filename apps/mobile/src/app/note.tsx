@@ -204,28 +204,31 @@ export default function Note() {
     [id],
   )
 
-  const pickImage = useCallback(async (source: 'camera' | 'library') => {
-    try {
-      if (source === 'camera') {
-        const permission = await ImagePicker.requestCameraPermissionsAsync()
-        if (!permission.granted) return null
+  const pickImage = useCallback(
+    async (source: 'camera' | 'library') => {
+      try {
+        if (source === 'camera') {
+          const permission = await ImagePicker.requestCameraPermissionsAsync()
+          if (!permission.granted) return null
+        }
+        const options: ImagePicker.ImagePickerOptions = { mediaTypes: ['images'], quality: 0.85 }
+        const result =
+          source === 'camera'
+            ? await ImagePicker.launchCameraAsync(options)
+            : await ImagePicker.launchImageLibraryAsync(options)
+        const asset = result.canceled ? null : result.assets[0]
+        if (!asset) return null
+        const fromName = /\.([a-z0-9]{2,5})$/i.exec(asset.fileName ?? asset.uri)?.[1]
+        const fromType = asset.mimeType?.split('/')[1]
+        const extension = (fromName ?? fromType ?? 'jpg').toLowerCase().replace('jpeg', 'jpg')
+        return await attachImage(id, await new File(asset.uri).bytes(), extension)
+      } catch (e) {
+        setSaveError(messageOf(e))
+        return null
       }
-      const options: ImagePicker.ImagePickerOptions = { mediaTypes: ['images'], quality: 0.85 }
-      const result =
-        source === 'camera'
-          ? await ImagePicker.launchCameraAsync(options)
-          : await ImagePicker.launchImageLibraryAsync(options)
-      const asset = result.canceled ? null : result.assets[0]
-      if (!asset) return null
-      const fromName = /\.([a-z0-9]{2,5})$/i.exec(asset.fileName ?? asset.uri)?.[1]
-      const fromType = asset.mimeType?.split('/')[1]
-      const extension = (fromName ?? fromType ?? 'jpg').toLowerCase().replace('jpeg', 'jpg')
-      return await attachImage(await new File(asset.uri).bytes(), extension)
-    } catch (e) {
-      setSaveError(messageOf(e))
-      return null
-    }
-  }, [])
+    },
+    [id],
+  )
 
   const title = name.replace(/\.(md|markdown)$/i, '')
   const toggleEditing = useCallback(() => {

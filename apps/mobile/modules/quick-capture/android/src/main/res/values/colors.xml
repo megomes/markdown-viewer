@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+  <color name="quick_capture_bg">#F211111E</color>
+  <color name="quick_capture_card">#FF161627</color>
+  <color name="quick_capture_border">#FF262639</color>
+  <color name="quick_capture_text">#FFF4F4F8</color>
+  <color name="quick_capture_text_secondary">#FFA7A7B9</color>
+  <color name="quick_capture_text_tertiary">#FF6E6E82</color>
+  <color name="quick_capture_accent">#FFFF4D4F</color>
+</resources>

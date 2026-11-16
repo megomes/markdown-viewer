@@ -24,6 +24,36 @@ import {
 import { decode, encode, type TextShape } from '@markdown-viewer/core/text'
 import { rewriteLinks } from '@markdown-viewer/core/rewrite'
 import type { Entry } from '@markdown-viewer/core/fs'
+import {
+  ICONIZE_FILE,
+  ICONS_FILE,
+  iconsAfterMove,
+  iconsAfterRemove,
+  parseIconize,
+  parseIcons,
+  serializeIcons,
+  type IconMap,
+} from '@markdown-viewer/core/icons'
+import {
+  ATTACHMENTS,
+  environmentsOf,
+  parseEnvironments,
+  type EnvironmentsConfig,
+} from '@markdown-viewer/core/environments'
+import {
+  attachmentName,
+  attachmentsFolder,
+  isAttachmentsFolder,
+} from '@markdown-viewer/core/attachments'
+import {
+  captureBody,
+  captureName,
+  defaultCaptureFolder,
+  noteSnippet,
+} from '@markdown-viewer/core/capture'
+import { accentOf } from '@markdown-viewer/core/environments'
+import { setWidgetNotes, type WidgetNote } from '../../modules/quick-capture'
+import { loadPrefs, savePrefs, wipePrefs, type Prefs } from './prefs'
 import { httpRemote, listen } from '@markdown-viewer/sync/http-remote'
 import { VaultMirror, type MirrorFile, type MirrorProgress } from '@markdown-viewer/sync/mirror'
 import { forgetPairing, loadPaired, pair, type Paired, type PairingCode } from './pairing'
@@ -37,8 +67,7 @@ import {
 
 /** The single base on the phone. Ids and links are made against it. */
 export const VAULT_BASE = 'vault'
-/** Where photos and pasted images go, as in the vault's Obsidian settings (spec, section 2). */
-export const ATTACHMENTS = 'Files'
+export const ENVIRONMENTS_FILE = '.markdown-viewer/environments.json'
 
 export interface VaultSnapshot {
   phase: 'loading' | 'unpaired' | 'ready'
@@ -47,6 +76,15 @@ export interface VaultSnapshot {
   /** Folders made here with nothing in them yet. */
   folders: string[]
   index: BaseIndex
+  /** The icon of each folder and file that has one, by path. */
+  icons: IconMap
+  /** The folders at the root that are environments, and the colour of each. */
+  environments: string[]
+  environmentColors: Record<string, string>
+  /** File ids of the notes pinned to the widget. */
+  pins: string[]
+  /** Where a quick capture goes: the folder chosen, or the one the app picks. */
+  captureFolder: string
   syncing: boolean
   progress: MirrorProgress | null
   lastSync: number | null
@@ -63,6 +101,11 @@ let snapshot: VaultSnapshot = {
   files: [],
   folders: [],
   index: EMPTY_INDEX,
+  icons: {},
+  environments: [],
+  environmentColors: {},
+  pins: [],
+  captureFolder: '',
   syncing: false,
   progress: null,
   lastSync: null,
@@ -114,7 +157,10 @@ async function open(paired: Paired): Promise<void> {
     folders: await loadEmptyFolders(),
     pending: await mirror.pendingCount(),
   })
+  prefs = await loadPrefs()
+  set({ pins: prefs.pins })
   void reindex()
+  void loadVaultSettings().then(refreshCapture)
   stopListening = listen(paired.connection, () => void syncNow())
   void syncNow()
 }
@@ -147,11 +193,19 @@ export async function unpair(): Promise<void> {
   mirror = null
   await forgetPairing()
   wipeLocalVault()
+  wipePrefs()
+  prefs = { pins: [], captureFolder: null }
+  setWidgetNotes([])
   set({
     phase: 'unpaired',
     files: [],
     folders: [],
     index: EMPTY_INDEX,
+    icons: {},
+    environments: [],
+    environmentColors: {},
+    pins: [],
+    captureFolder: '',
     lastSync: null,
     deviceName: null,
     pending: 0,
@@ -181,6 +235,7 @@ export async function syncNow(): Promise<void> {
         : {}),
     })
     if (report.changed > 0 || report.conflicts.length > 0) void reindex()
+    void loadVaultSettings().then(refreshCapture)
   } catch (error) {
     // Offline is normal on a phone: what is on the device still opens and still saves.
     set({ error: messageOf(error), pending: await current.pendingCount() })
@@ -204,6 +259,7 @@ let indexTimer: ReturnType<typeof setTimeout> | null = null
 async function changed(): Promise<void> {
   const current = vault()
   set({ files: await current.catalog(), pending: await current.pendingCount() })
+  void loadVaultSettings().then(refreshCapture)
   if (indexTimer) clearTimeout(indexTimer)
   indexTimer = setTimeout(() => void reindex(), 1200)
   if (syncTimer) clearTimeout(syncTimer)
@@ -323,13 +379,25 @@ async function forgetEmptyFolder(folder: string): Promise<void> {
   set({ folders })
 }
 
-/** Saves a photo or picture in the attachments folder; resolves to its file name. */
-export async function attachImage(bytes: Uint8Array, extension: string): Promise<string> {
-  const d = new Date()
-  const two = (n: number) => String(n).padStart(2, '0')
-  const stamp = `${d.getFullYear()}${two(d.getMonth() + 1)}${two(d.getDate())} ${two(d.getHours())}${two(d.getMinutes())}${two(d.getSeconds())}`
-  const name = freeName(ATTACHMENTS, 'Foto ' + stamp, '.' + extension.toLowerCase())
-  await vault().write(join(ATTACHMENTS, name), bytes)
+/**
+ * Saves a photo or picture as an attachment of a note, as the desktop does: in
+ * the `Files` folder of the note's environment, under the note's name and a
+ * number. Resolves to the file name, which is what the embed is written with.
+ */
+export async function attachImage(
+  noteId: string,
+  bytes: Uint8Array,
+  extension: string,
+): Promise<string> {
+  const note = fileOf(noteId)
+  if (!note) throw new Error('Esta nota não existe mais no vault.')
+  const folder = attachmentsFolder(note.path, snapshot.environments)
+  // An embed is found by its name alone: no two files of the vault may share it.
+  const taken = new Set(snapshot.files.map((file) => nameOf(file.path).toLowerCase()))
+  const name = attachmentName(nameOf(note.path), extension, (candidate) =>
+    taken.has(candidate.toLowerCase()),
+  )
+  await vault().write(join(folder, name), bytes)
   await changed()
   return name
 }
@@ -363,6 +431,8 @@ export async function relocate(from: string, to: string): Promise<string> {
   set({ folders, files: await current.catalog() })
   await forgetEmptyFolder(parentOf(to))
   await updateLinks(index, moved)
+  // The icon goes with the folder, as on the desktop.
+  await writeIcons(iconsAfterMove(snapshot.icons, from, to))
   await changed()
   return to
 }
@@ -406,7 +476,211 @@ export async function removePath(path: string): Promise<void> {
   )
   await saveEmptyFolders(folders)
   set({ folders })
+  await writeIcons(iconsAfterRemove(snapshot.icons, path))
   await changed()
+}
+
+/* ------------------------------------------- quick capture and widget */
+
+let prefs: Prefs = { pins: [], captureFolder: null }
+
+/** The folders a note can be captured into: every one that is not hidden or of attachments. */
+export function captureFolders(catalog: MirrorFile[], empty: string[]): string[] {
+  return allFolders(catalog, empty).filter(
+    (folder) => !isAttachmentsFolder(folder) && !folder.includes('/' + ATTACHMENTS + '/'),
+  )
+}
+
+/** Where a capture goes: the folder chosen while it still exists, else the app's pick. */
+function captureFolderNow(): string {
+  const folders = captureFolders(snapshot.files, snapshot.folders)
+  const chosen = prefs.captureFolder
+  if (chosen !== null && (chosen === '' || folders.includes(chosen))) return chosen
+  return defaultCaptureFolder(folders, snapshot.environments)
+}
+
+export async function setCaptureFolder(folder: string): Promise<void> {
+  prefs = { ...prefs, captureFolder: folder }
+  await savePrefs(prefs)
+  set({ captureFolder: folder })
+}
+
+/** Pins a note to the widget, or takes it off. */
+export async function togglePin(id: string): Promise<void> {
+  const pins = prefs.pins.includes(id)
+    ? prefs.pins.filter((one) => one !== id)
+    : [...prefs.pins, id]
+  prefs = { ...prefs, pins }
+  await savePrefs(prefs)
+  set({ pins })
+  // A pinned note has to be on the device for the widget to say what is in it.
+  const file = fileOf(id)
+  if (file && !file.local) await readFile(file.path).catch(() => {})
+  await publishWidget()
+}
+
+/** What each note says on the widget, by file id, kept while the note does not change. */
+const snippets = new Map<string, { hash: string; text: string }>()
+const WIDGET_NOTES = 12
+
+/**
+ * Tells the widget what to show: the pinned notes, or, with nothing pinned, the
+ * ones written last, so a widget just placed is not an empty box.
+ */
+async function publishWidget(): Promise<void> {
+  const isNote = (file: MirrorFile) => /\.(md|markdown)$/i.test(file.path)
+  const pinned = prefs.pins
+    .map((id) => fileOf(id))
+    .filter((file): file is MirrorFile => file !== null)
+  const shown =
+    pinned.length > 0
+      ? pinned
+      : snapshot.files
+          .filter(
+            (file) =>
+              isNote(file) && file.local && !file.path.split('/').some((p) => p.startsWith('.')),
+          )
+          .toSorted((a, b) => b.mtime - a.mtime)
+          .slice(0, 6)
+  const notes: WidgetNote[] = []
+  for (const file of shown.slice(0, WIDGET_NOTES)) {
+    let known = snippets.get(file.fileId)
+    if (known?.hash !== file.hash) {
+      let text = ''
+      try {
+        if (file.local && isNote(file)) text = noteSnippet(decode(await files.read(file.path)).text)
+      } catch {
+        // Not readable right now: the title alone.
+      }
+      known = { hash: file.hash, text }
+      snippets.set(file.fileId, known)
+    }
+    const environment = environmentOf(file.path, snapshot.environments)
+    notes.push({
+      id: file.fileId,
+      title: nameOf(file.path).replace(/\.(md|markdown)$/i, ''),
+      text: known.text,
+      color: environment ? accentOf(snapshot.environmentColors[environment]).dark : '',
+    })
+  }
+  setWidgetNotes(notes)
+}
+
+/** After the catalog or the settings changed: the capture folder and the widget follow. */
+async function refreshCapture(): Promise<void> {
+  if (!mirror) return
+  // A pinned note that left the vault leaves the widget's list too.
+  const pins = prefs.pins.filter((id) => fileOf(id) !== null)
+  if (pins.length !== prefs.pins.length && snapshot.lastSync !== null) {
+    prefs = { ...prefs, pins }
+    await savePrefs(prefs)
+  }
+  const captureFolder = captureFolderNow()
+  if (captureFolder !== snapshot.captureFolder || prefs.pins !== snapshot.pins) {
+    set({ captureFolder, pins: prefs.pins })
+  }
+  await publishWidget()
+}
+
+export interface CaptureInput {
+  folder: string
+  title: string
+  /** What the sharing app called it, if anything was shared. */
+  subject: string
+  text: string
+  images: { bytes: Uint8Array; extension: string }[]
+}
+
+/** Writes a captured note; resolves to its id. */
+export async function capture(input: CaptureInput): Promise<string> {
+  const stem = captureName(input.title, input.subject, input.text, new Date())
+  const path = join(input.folder, freeName(input.folder, stem, '.md'))
+  const body = captureBody(input.subject, input.text)
+  const file = await vault().write(path, encode(body, DEFAULT_SHAPE))
+  await forgetEmptyFolder(input.folder)
+  // The catalog has to know the note before its pictures are named after it.
+  set({ files: await vault().catalog() })
+  if (input.images.length > 0) {
+    const embeds: string[] = []
+    for (const image of input.images) {
+      embeds.push(`![[${await attachImage(file.fileId, image.bytes, image.extension)}]]`)
+    }
+    const text = (body ? body + '\n' : '') + embeds.join('\n') + '\n'
+    const saved = await vault().write(path, encode(text, DEFAULT_SHAPE))
+    written.set(file.fileId, saved.hash)
+  }
+  await changed()
+  return file.fileId
+}
+
+/* ------------------------------------------- icons and environments */
+
+/** The versions of the settings files that are loaded, to read them only when they change. */
+let settingsSeen = ''
+let settingsLoading = false
+
+const SETTINGS_FILES = [ICONS_FILE, ICONIZE_FILE, ENVIRONMENTS_FILE]
+
+/**
+ * Reads the icons and the environments from the files the desktop keeps in the
+ * vault. The icons are the app's own, or Iconize's while the app has none. The
+ * environments come from the folders at the root, less the ones set aside.
+ */
+async function loadVaultSettings(): Promise<void> {
+  if (settingsLoading || !mirror) return
+  const catalog = snapshot.files
+  const hashOf = (path: string) => catalog.find((file) => file.path === path)?.hash ?? ''
+  const roots = [
+    ...new Set([
+      ...catalog.filter((file) => file.path.includes('/')).map((file) => file.path.split('/')[0]!),
+      ...snapshot.folders.map((folder) => folder.split('/')[0]!),
+    ]),
+  ]
+  const seen = SETTINGS_FILES.map(hashOf).join('|') + '|' + roots.toSorted().join('/')
+  if (seen === settingsSeen) return
+  settingsLoading = true
+  try {
+    // A file that is in the vault and could not be fetched (no network) is
+    // tried again on the next pass, instead of being taken for an empty one.
+    let missed = false
+    const text = async (path: string) => {
+      if (!hashOf(path)) return null
+      try {
+        return decode(await vault().open(path)).text
+      } catch {
+        missed = true
+        return null
+      }
+    }
+    const own = await text(ICONS_FILE)
+    let icons = own === null ? null : parseIcons(own)
+    if (!icons) {
+      const iconize = await text(ICONIZE_FILE)
+      icons = iconize === null ? {} : parseIconize(iconize)
+    }
+    const config: EnvironmentsConfig = parseEnvironments((await text(ENVIRONMENTS_FILE)) ?? '')
+    set({
+      icons,
+      environments: environmentsOf(roots, config),
+      environmentColors: config.colors,
+    })
+    if (!missed) settingsSeen = seen
+  } finally {
+    settingsLoading = false
+  }
+}
+
+/** Writes the icons to the app's own file, when they changed. */
+async function writeIcons(icons: IconMap): Promise<void> {
+  if (icons === snapshot.icons) return
+  set({ icons })
+  await vault().write(ICONS_FILE, new TextEncoder().encode(serializeIcons(icons)))
+}
+
+/** The environment a path is in, or null. */
+export function environmentOf(path: string, environments: string[]): string | null {
+  const root = path.split('/')[0]!
+  return environments.includes(root) ? root : null
 }
 
 /** Every folder of the vault, for choosing where to move something. */
