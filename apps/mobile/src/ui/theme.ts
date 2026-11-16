@@ -15,4 +15,4 @@ export const colors = {
   green: '#3ecf8e',
 }
 
-export const radius = { sm: 8, md: 10, lg: 12 }
+export const radius = { sm: 6, md: 8, lg: 10 }

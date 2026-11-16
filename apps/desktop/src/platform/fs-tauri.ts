@@ -94,8 +94,8 @@ export class TauriFileSystem implements FileSystem {
 
   async list(baseId: string, path: string): Promise<Entry[]> {
     const entries = await readDir(this.absolute(baseId, path))
+    // Hidden entries come too: whether the tree shows them is the tree's call.
     return entries
-      .filter((entry) => !entry.name.startsWith('.'))
       .map((entry) => {
         const childPath = joinPath(path, entry.name)
         return {

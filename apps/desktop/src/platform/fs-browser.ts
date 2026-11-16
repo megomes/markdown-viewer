@@ -144,7 +144,6 @@ export class BrowserFileSystem implements FileSystem {
     const dir = await this.directoryAt(open, path)
     const entries: Entry[] = []
     for await (const [name, handle] of dir.entries()) {
-      if (name.startsWith('.')) continue
       const childPath = joinPath(path, name)
       open.handles.set(childPath, handle)
       entries.push({

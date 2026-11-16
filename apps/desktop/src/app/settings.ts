@@ -32,8 +32,13 @@ export interface Settings {
   infoPanel: boolean
   /** Whether the history at the foot of the sidebar is open. */
   recentsOpen: boolean
-  /** Whether the tree shows the files this editor cannot open. */
+  /**
+   * Whether the tree shows every file. Off, it shows what the person writes
+   * (notes, HTML, Bases) and gathers the rest of each folder in one line.
+   */
   showAllFiles: boolean
+  /** Whether the tree shows what starts with a dot (`.claude`, `.obsidian`). */
+  showHidden: boolean
   /** How the tree orders the files of a folder; folders always come first. */
   treeSort: TreeSort
   themeMode: ThemeMode
@@ -65,6 +70,7 @@ export const DEFAULTS: Settings = {
   infoPanel: false,
   recentsOpen: false,
   showAllFiles: false,
+  showHidden: true,
   treeSort: 'name-asc',
   themeMode: 'system',
   readOnly: false,

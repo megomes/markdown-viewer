@@ -237,9 +237,21 @@ export function SettingsWindow({ settings, update, reset, onClose, onMeasureFocu
           aria-pressed={settings.showAllFiles}
           onClick={() => update('showAllFiles', !settings.showAllFiles)}
         >
-          <span className="settings-label">Outros arquivos</span>
+          <span className="settings-label">Todos os arquivos</span>
           <span className="switch" data-on={settings.showAllFiles} />
         </button>
+        <button
+          type="button"
+          className="settings-row is-clickable"
+          aria-pressed={settings.showHidden}
+          onClick={() => update('showHidden', !settings.showHidden)}
+        >
+          <span className="settings-label">Ocultos (.claude, .obsidian)</span>
+          <span className="switch" data-on={settings.showHidden} />
+        </button>
+        <p className="settings-note">
+          Desligado, a árvore mostra notas, HTML e Bases, e junta o resto de cada pasta numa linha.
+        </p>
 
         <div className="settings-divider" />
         <p className="section-label">Edição</p>

@@ -88,9 +88,11 @@ export function SyncPanel({ bases, activePath, onVault, onClose }: Props) {
           </button>
         </header>
         {!syncAvailable() ? (
-          <p className="sync-note">
-            O sync roda no app de desktop. Aqui no navegador não há como chegar à pasta.
-          </p>
+          <div className="sync-body">
+            <p className="sync-note">
+              O sync roda no app de desktop. Aqui no navegador não há como chegar à pasta.
+            </p>
+          </div>
         ) : sync.recovery ? (
           // Before anything else: this code is shown once, and the form that
           // made it is gone the moment the vault exists.

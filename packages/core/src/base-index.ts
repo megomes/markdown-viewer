@@ -86,6 +86,9 @@ async function collect(
   }
 
   for (const entry of entries) {
+    // Hidden files and folders (`.claude`, `.obsidian`) can be looked at in the
+    // tree, but they are not notes: no search, no links, no quick open.
+    if (entry.name.startsWith('.')) continue
     if (entry.kind === 'directory') {
       if (!SKIPPED.has(entry.name)) await collect(source, baseId, entry.path, into)
     } else into.push(entry)

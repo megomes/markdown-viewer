@@ -340,8 +340,6 @@ export class MemoryFileSystem implements FileSystem {
       const rest = full.slice(prefix.length)
       const slash = rest.indexOf('/')
       const name = slash < 0 ? rest : rest.slice(0, slash)
-      // Hidden like the other adapters hide them: `.obsidian` is the app's, not a note.
-      if (name.startsWith('.')) continue
       if (name === '') continue
       const childPath = joinPath(path, name)
       if (seen.has(childPath)) continue

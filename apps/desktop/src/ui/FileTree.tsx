@@ -1,4 +1,4 @@
-import { memo, useEffect, useRef } from 'react'
+import { memo, useEffect, useRef, useState } from 'react'
 import { isPlainText, isTextFile, viewerOf, type Entry } from '@markdown-viewer/core/fs'
 import type { TreeSort } from '~/app/settings'
 import { ChevronIcon, FileIcon, FolderIcon, MarkdownIcon } from './icons'
@@ -90,8 +90,22 @@ interface Props extends TreeHandlers {
   parentId: string
   depth: number
   showAllFiles: boolean
+  showHidden: boolean
   /** Entry id of the row that is currently being renamed, if any. */
   renamingId: string | null
+}
+
+/** Left behind by the system, never worth a line of the tree. */
+const JUNK = new Set(['.DS_Store', 'Thumbs.db', 'desktop.ini'])
+
+/**
+ * What the person writes: notes, HTML pages and Bases. Everything else in a
+ * vault (images, PDFs, the code and data a project carries) is material around
+ * the notes, and is gathered in one line per folder until asked for.
+ */
+export function isWritten(name: string): boolean {
+  const viewer = viewerOf(name)
+  return viewer === 'note' || viewer === 'html' || viewer === 'base'
 }
 
 /** True when the entry itself matches, or any loaded descendant does. */
@@ -115,15 +129,25 @@ export const FileTree = memo(function FileTree({
   parentId,
   depth,
   showAllFiles,
+  showHidden,
   renamingId,
   ...on
 }: Props) {
   const filter = data.filter.trim().toLowerCase()
+  // The rest of this one folder, shown because its line was clicked.
+  const [revealed, setRevealed] = useState(false)
+  const everything = showAllFiles || revealed
+  let others = 0
   const entries = sortEntries(
     (data.children[parentId] ?? []).filter((entry) => {
-      // Notes and everything the app can show; the rest only when asked for.
-      if (entry.kind === 'file' && !showAllFiles && !viewerOf(entry.name)) return false
-      return filter === '' || matchesFilter(data, entry, filter)
+      if (JUNK.has(entry.name)) return false
+      if (!showHidden && entry.name.startsWith('.')) return false
+      if (filter !== '' && !matchesFilter(data, entry, filter)) return false
+      if (entry.kind === 'file' && !isWritten(entry.name)) {
+        others++
+        return everything
+      }
+      return true
     }),
     data.sort,
     data.modified,
@@ -244,6 +268,7 @@ export const FileTree = memo(function FileTree({
                 parentId={entry.id}
                 depth={depth + 1}
                 showAllFiles={showAllFiles}
+                showHidden={showHidden}
                 renamingId={renamingId}
                 {...on}
               />
@@ -251,6 +276,26 @@ export const FileTree = memo(function FileTree({
           </li>
         )
       })}
+      {others > 0 && !showAllFiles && (
+        <li>
+          <button
+            type="button"
+            className="tree-row is-quiet tree-others"
+            aria-expanded={revealed}
+            title={revealed ? 'Voltar a mostrar só as notas' : 'Imagens, PDFs, código e dados'}
+            onClick={() => setRevealed(!revealed)}
+          >
+            <span className="tree-twisty is-leaf" />
+            <span className="tree-name">
+              {revealed
+                ? 'ocultar ' + (others === 1 ? 'o outro arquivo' : `os ${others} outros arquivos`)
+                : others === 1
+                  ? 'mais 1 arquivo'
+                  : `mais ${others} arquivos`}
+            </span>
+          </button>
+        </li>
+      )}
     </ul>
   )
 })

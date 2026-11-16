@@ -1663,6 +1663,7 @@ export function App() {
                   parentId={entryId(base.id, '')}
                   depth={0}
                   showAllFiles={settings.showAllFiles}
+                  showHidden={settings.showHidden}
                   renamingId={renamingId}
                   {...tree}
                 />
