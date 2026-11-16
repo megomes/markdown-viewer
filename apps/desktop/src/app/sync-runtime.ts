@@ -17,6 +17,8 @@ import {
   joinVault,
   listDevices,
   listen,
+  opensVault,
+  renewRecoveryCode,
   revokeDevice,
   startPairing,
   type Connection,
@@ -192,7 +194,27 @@ export async function setUpVault(options: {
     connection,
     key,
   )
+  set({ recovery: recoveryCode })
   return recoveryCode
+}
+
+/** Whether this password, or this recovery code, opens the vault. */
+export async function checkSecret(kind: 'password' | 'recovery', secret: string): Promise<boolean> {
+  if (!running) throw new Error('O sync não está ligado.')
+  return opensVault(running.connection, running.key, kind, secret)
+}
+
+/** A new recovery code. The one before stops working. */
+export async function newRecoveryCode(): Promise<string> {
+  if (!running) throw new Error('O sync não está ligado.')
+  const code = await renewRecoveryCode(running.connection, running.key)
+  set({ recovery: code })
+  return code
+}
+
+/** The code was put away: it is not shown again. */
+export function forgetRecoveryCode(): void {
+  set({ recovery: null })
 }
 
 export async function joinExistingVault(options: {
@@ -226,7 +248,7 @@ export async function leaveVault(): Promise<void> {
   stopSync()
   if (config) await secrets.delete(SECRET(config.vault)).catch(() => {})
   saveConfig(null)
-  set({ status: 'off', events: [], lastSync: null })
+  set({ status: 'off', events: [], lastSync: null, recovery: null })
 }
 
 export async function pairNewDevice(): Promise<{

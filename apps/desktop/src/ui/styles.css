@@ -3134,6 +3134,96 @@ html[data-window='dock'] .chip {
   font-weight: 600;
 }
 
+.sync-hint {
+  color: var(--text-tertiary);
+  font-size: 11px;
+  line-height: 1.4;
+}
+
+.sync-ok {
+  color: var(--tone-green);
+}
+
+.sync-backup {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 12px;
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-md);
+  background: var(--bg-content);
+}
+
+.sync-backup dl,
+.sync-backup ol {
+  margin: 0;
+}
+
+.sync-backup ol {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding-left: 18px;
+  color: var(--text-secondary);
+}
+
+.sync-backup dt {
+  margin-top: 8px;
+  font-weight: 600;
+}
+
+.sync-backup dd {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 4px;
+  margin: 2px 0 0;
+}
+
+.sync-backup dd small {
+  color: var(--text-tertiary);
+  font-size: 12px;
+}
+
+.sync-backup-value {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  max-width: 100%;
+}
+
+.sync-backup-value code {
+  overflow-wrap: anywhere;
+  font-family: var(--font-mono);
+  font-size: 12px;
+  user-select: all;
+}
+
+.sync-backup-value input {
+  width: 260px;
+  max-width: 100%;
+  padding: 5px 8px;
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-sm);
+  outline: 0;
+  background: var(--surface-1);
+  color: var(--text-primary);
+  font: inherit;
+}
+
+.sync-backup-value input:focus {
+  border-color: var(--accent);
+}
+
+.sync-check {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 4px;
+  color: var(--text-secondary);
+}
+
 .sync-status.is-error {
   color: var(--tone-red);
 }

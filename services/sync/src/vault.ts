@@ -354,6 +354,30 @@ export class Vault extends DurableObject<Env> {
       return json(JSON.parse(this.meta('wrapped') ?? 'null'))
     }
 
+    // A new recovery code, made on a device that already holds the vault key.
+    // Only the recovery half changes: the password's stays as it is, so a
+    // request gone wrong can never leave the vault with no way in.
+    if (action === 'keys' && rest[0] === 'recovery' && method === 'PUT') {
+      const current = JSON.parse(this.meta('wrapped') ?? 'null') as Record<string, unknown> | null
+      if (!current) return json({ error: 'esse vault não existe' }, 404)
+      const recovery = (await req.json()) as Record<string, unknown> | null
+      const text = (value: unknown) => typeof value === 'string' && value.length > 0
+      if (
+        !recovery ||
+        typeof recovery !== 'object' ||
+        !text(recovery.alg) ||
+        !text(recovery.salt) ||
+        !text(recovery.nonce) ||
+        !text(recovery.cipher)
+      )
+        return json({ error: 'chave embrulhada inválida' }, 400)
+      this.sql.exec(
+        "update meta set value = ? where key = 'wrapped'",
+        JSON.stringify({ ...current, recovery }),
+      )
+      return json({ ok: true })
+    }
+
     return json({ error: 'não encontrado' }, 404)
   }
 

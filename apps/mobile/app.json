@@ -2,7 +2,7 @@
   "expo": {
     "name": "markdown-viewer",
     "slug": "markdown-viewer",
-    "version": "0.10.0",
+    "version": "0.11.0",
     "scheme": "markdown-viewer",
     "orientation": "default",
     "icon": "./assets/icon.png",

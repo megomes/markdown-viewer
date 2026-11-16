@@ -241,7 +241,14 @@ recuperável pelo histórico.
 - **Aparelho novo**: escaneia um QR mostrado por um aparelho já pareado, ou digita a
   senha do vault.
 - O código de recuperação é gerado na criação do vault e precisa ser guardado fora dos
-  aparelhos.
+  aparelhos. Um aparelho que já está no vault pode gerar outro (o antigo deixa de valer, a
+  senha não muda): o servidor troca só a metade da recuperação da chave embrulhada.
+- **Backup e recuperação**, no painel de Sincronização do desktop: os cinco itens que
+  trazem as notas de volta (servidor, nome do vault, código de configuração, senha do
+  vault, código de recuperação), cada um mostrado, copiável ou conferido contra o vault, e
+  os passos para recuperar. O painel avisa enquanto a pessoa não marcar que guardou.
+- Sem nenhum aparelho no vault, um computador novo entra com o código de configuração mais
+  a senha do vault ou o código de recuperação.
 
 **Autenticação.** Não existe conta nem login com Google. Cada aparelho recebe um token
 no pareamento. O app mostra a lista de aparelhos e permite revogar um. A web tem uma

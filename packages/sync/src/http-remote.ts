@@ -208,6 +208,49 @@ export async function joinVault(options: {
   return { connection: { server: options.server, vault: options.vault, token: result.token }, key }
 }
 
+const sameBytes = (a: Uint8Array, b: Uint8Array) =>
+  a.length === b.length && a.every((byte, i) => byte === b[i])
+
+/**
+ * Whether a password or a recovery code really opens this vault, checked
+ * against what the server holds: what is kept as a backup is only worth
+ * something if it works on the day it is needed.
+ */
+export async function opensVault(
+  conn: Connection,
+  key: Uint8Array,
+  kind: 'password' | 'recovery',
+  secret: string,
+): Promise<boolean> {
+  const wrapped = await call<Wrapped | null>(conn, 'keys')
+  if (!wrapped) throw new Error('O servidor não tem a chave deste vault.')
+  try {
+    const opened = await unwrapKey(
+      wrapped[kind],
+      kind === 'recovery' ? normalizeRecoveryCode(secret) : secret,
+    )
+    return sameBytes(opened, key)
+  } catch {
+    return false
+  }
+}
+
+/**
+ * Replaces the recovery code with a new one, from a device that holds the
+ * vault key. The old code stops working; the password is not touched.
+ */
+export async function renewRecoveryCode(conn: Connection, key: Uint8Array): Promise<string> {
+  const code = await generateRecoveryCode()
+  const recovery = await wrapKey(key, code)
+  // Never sent before it is seen to open the same key it was made from.
+  if (!sameBytes(await unwrapKey(recovery, code), key))
+    throw new Error('O código novo não abriu a chave. Nada foi trocado.')
+  await call(conn, 'keys/recovery', { method: 'PUT', body: JSON.stringify(recovery) })
+  if (!(await opensVault(conn, key, 'recovery', code)))
+    throw new Error('O servidor não confirmou o código novo. Gere outro.')
+  return code
+}
+
 const PAIR_ALPHABET = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789'
 
 export function normalizePairingCode(code: string): string {

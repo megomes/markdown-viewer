@@ -19,6 +19,16 @@ Cria o vault e admite aparelhos quando não há outro aparelho para parear. Fica
 git, em `~/.markdown-viewer/sync-setup-code.txt`. O Worker guarda só o SHA-256 dele, no
 secret `SETUP_HASH`.
 
+## Código de recuperação
+
+`PUT /v/<vault>/keys/recovery`, de um aparelho autenticado, troca só a metade da
+recuperação da chave embrulhada; a da senha fica como está. O teste de ponta a ponta,
+contra o `wrangler dev`:
+
+```bash
+npx tsx packages/sync/scripts/check-recovery.ts --server http://localhost:8788 --setup-code <código local>
+```
+
 ## Publicar
 
 ```bash

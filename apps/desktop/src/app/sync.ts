@@ -30,3 +30,7 @@ export const revoke = (id: string) => runtime().then((m) => m.revoke(id))
 export const versionsOf = (path: string) => runtime().then((m) => m.versionsOf(path))
 export const restoreVersion = (v: import('./sync-runtime').Version) =>
   runtime().then((m) => m.restoreVersion(v))
+export const checkSecret = (kind: 'password' | 'recovery', secret: string) =>
+  runtime().then((m) => m.checkSecret(kind, secret))
+export const newRecoveryCode = () => runtime().then((m) => m.newRecoveryCode())
+export const forgetRecoveryCode = () => runtime().then((m) => m.forgetRecoveryCode())

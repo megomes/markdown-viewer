@@ -29,6 +29,12 @@ export interface SyncView {
   message: string | null
   /** The latest things that happened, newest first, for the panel. */
   events: (SyncEvent & { at: number })[]
+  /**
+   * A recovery code made a moment ago and not yet put away. Kept here, and not
+   * in the form that made it: the form goes away the moment the vault exists.
+   * Never written to disk.
+   */
+  recovery: string | null
 }
 
 export let view: SyncView = {
@@ -37,6 +43,7 @@ export let view: SyncView = {
   lastSync: null,
   message: null,
   events: [],
+  recovery: null,
 }
 const listeners = new Set<() => void>()
 
