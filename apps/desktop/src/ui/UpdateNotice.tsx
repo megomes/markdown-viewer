@@ -9,7 +9,7 @@
 
 import { useCallback, useEffect, useState } from 'react'
 import { percent, type Download } from '~/app/updates'
-import { lookForUpdate, restart, type PendingUpdate } from '~/platform/updater'
+import { lookForUpdate, onUpdateOffered, restart, type PendingUpdate } from '~/platform/updater'
 
 type Stage =
   | { kind: 'offered' }
@@ -30,9 +30,15 @@ export function UpdateNotice() {
         if (live && found) setUpdate(found)
       })
     }, 4000)
+    // Found by hand in Ajustes: offered here again, even if declined before.
+    const stop = onUpdateOffered((found) => {
+      setUpdate(found)
+      setStage({ kind: 'offered' })
+    })
     return () => {
       live = false
       clearTimeout(timer)
+      stop()
     }
   }, [])
 

@@ -3,6 +3,8 @@ import { EDITOR_BINDINGS, SHORTCUTS, editorCap, keyCap, onApple } from './shortc
 import { FONT_LABELS, LIMITS, type BodyFont, type Settings, type ThemeMode } from '~/app/settings'
 import type { Side } from '~/app/dock-layout'
 import { ChevronIcon, CloseIcon, GripIcon } from './icons'
+import { isDesktop } from '~/platform'
+import { lookForUpdate, offerUpdate } from '~/platform/updater'
 
 const POSITION_KEY = 'markdown-viewer.settings.position'
 
@@ -276,6 +278,14 @@ export function SettingsWindow({ settings, update, reset, onClose, onMeasureFocu
           <span className="switch" data-on={settings.readOnly} />
         </button>
 
+        {isDesktop() && (
+          <>
+            <div className="settings-divider" />
+            <p className="section-label">Versão</p>
+            <UpdateCheck />
+          </>
+        )}
+
         <div className="settings-divider" />
         {/* Closed to begin with: twenty six lines of reference that most
             visits to this window are not here for, and that would otherwise
@@ -379,5 +389,43 @@ function Segmented<T extends string>({ label, value, options, onChange }: Segmen
         ))}
       </div>
     </div>
+  )
+}
+
+/**
+ * The installed version, and a way to look for a newer one now instead of
+ * waiting for the next start. What is found is offered by the usual notice.
+ */
+function UpdateCheck() {
+  const [state, setState] = useState<'idle' | 'looking' | 'current' | 'found'>('idle')
+  const look = () => {
+    setState('looking')
+    void lookForUpdate().then((found) => {
+      if (!found) return setState('current')
+      setState('found')
+      offerUpdate(found)
+    })
+  }
+  return (
+    <>
+      <div className="settings-row">
+        <span className="settings-label">Instalada</span>
+        <span className="settings-value">{__APP_VERSION__}</span>
+      </div>
+      <button
+        type="button"
+        className="settings-row is-clickable"
+        disabled={state === 'looking'}
+        onClick={look}
+      >
+        <span className="settings-label">
+          {state === 'looking' ? 'Buscando…' : 'Buscar atualização'}
+        </span>
+      </button>
+      {state === 'current' && <p className="settings-note">Nenhuma versão nova encontrada.</p>}
+      {state === 'found' && (
+        <p className="settings-note">Tem versão nova: o aviso para instalar apareceu na janela.</p>
+      )}
+    </>
   )
 }

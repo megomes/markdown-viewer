@@ -46,6 +46,22 @@ export async function lookForUpdate(): Promise<PendingUpdate | null> {
   }
 }
 
+/**
+ * Hands a version found by hand (Ajustes > Buscar atualização) to the notice
+ * that offers it, so installing goes through the one place that does it.
+ */
+const FOUND = 'markdown-viewer:update-found'
+
+export function offerUpdate(update: PendingUpdate): void {
+  window.dispatchEvent(new CustomEvent<PendingUpdate>(FOUND, { detail: update }))
+}
+
+export function onUpdateOffered(handle: (update: PendingUpdate) => void): () => void {
+  const listener = (event: Event) => handle((event as CustomEvent<PendingUpdate>).detail)
+  window.addEventListener(FOUND, listener)
+  return () => window.removeEventListener(FOUND, listener)
+}
+
 /** Closes the app and opens it again, now on the version just installed. */
 export async function restart(): Promise<void> {
   const { relaunch } = await import('@tauri-apps/plugin-process')
