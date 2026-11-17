@@ -6,7 +6,7 @@ import { Alert, Pressable, ScrollView, Share, StyleSheet, Text, View } from 'rea
 import { diagnosticsText } from '../diagnostics'
 import { TransferBar } from '../ui/TransferBar'
 import { router } from 'expo-router'
-import { unpair, useVault } from '../vault/runtime'
+import { syncNow, unpair, useVault } from '../vault/runtime'
 import { checkForUpdate, installedLabel, installUpdate, useUpdates } from '../updates/updater'
 import { colors, radius } from '../ui/theme'
 
@@ -79,8 +79,14 @@ export default function Settings() {
             <Row label="Baixados" value={String(vault.files.filter((file) => file.local).length)} />
             <Row label="Esperando envio" value={String(vault.pending)} />
             {vault.syncing && vault.progress ? <TransferBar progress={vault.progress} /> : null}
-            <Pressable style={styles.secondary} onPress={confirmUnpair}>
-              <Text style={[styles.secondaryText, styles.danger]}>Desparear</Text>
+            <Pressable
+              style={[styles.secondary, vault.syncing && styles.disabled]}
+              disabled={vault.syncing}
+              onPress={() => void syncNow()}
+            >
+              <Text style={styles.secondaryText}>
+                {vault.syncing ? 'Sincronizando…' : 'Sincronizar agora'}
+              </Text>
             </Pressable>
           </View>
         </>
@@ -104,6 +110,13 @@ export default function Settings() {
           <Text style={styles.secondaryText}>Compartilhar diagnóstico</Text>
         </Pressable>
       </View>
+
+      {vault.phase === 'ready' ? (
+        // Out of the way: it wipes this device's copy, and asks first.
+        <Pressable style={styles.unpair} onPress={confirmUnpair} hitSlop={8}>
+          <Text style={styles.unpairText}>Desparear este aparelho</Text>
+        </Pressable>
+      ) : null}
     </ScrollView>
   )
 }
@@ -148,6 +161,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   secondaryText: { color: colors.textPrimary, fontSize: 15 },
-  danger: { color: colors.accentText },
+  unpair: { alignSelf: 'center', marginTop: 28, paddingVertical: 6 },
+  unpairText: { color: colors.textTertiary, fontSize: 13, textDecorationLine: 'underline' },
   disabled: { opacity: 0.6 },
 })

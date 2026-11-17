@@ -219,10 +219,14 @@ fn reveal_in_file_manager(path: String) -> Result<(), String> {
         command
     };
 
+    // Explorer only takes backslashes, and reads `/select,` itself, so the
+    // argument goes in raw: Rust's own quoting wraps the whole of it, switch
+    // included, and a path with a space in it then opens Documents instead.
     #[cfg(target_os = "windows")]
     let mut command = {
+        use std::os::windows::process::CommandExt;
         let mut command = Command::new("explorer");
-        command.arg(format!("/select,{}", path));
+        command.raw_arg(explorer_select(&path));
         command
     };
 
@@ -241,6 +245,23 @@ fn reveal_in_file_manager(path: String) -> Result<(), String> {
         .spawn()
         .map(|_| ())
         .map_err(|error| error.to_string())
+}
+
+/// Explorer's argument for selecting `path`: `/select,"C:\pasta\nome com espaço.md"`.
+#[cfg_attr(not(target_os = "windows"), allow(dead_code))]
+fn explorer_select(path: &str) -> String {
+    format!("/select,\"{}\"", path.replace('/', "\\"))
+}
+
+#[cfg(test)]
+mod explorer_tests {
+    #[test]
+    fn backslashes_and_quotes_the_path() {
+        assert_eq!(
+            super::explorer_select(r"C:\Users\m\vault/Personal Notes/Ideia nova.md"),
+            r#"/select,"C:\Users\m\vault\Personal Notes\Ideia nova.md""#
+        );
+    }
 }
 
 /// Hands a file to whatever the system opens that kind of file with.
