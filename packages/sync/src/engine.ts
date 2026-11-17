@@ -150,6 +150,25 @@ export class SyncEngine {
   }
 
   private saving: Promise<void> = Promise.resolve()
+  /** What the run under way has moved so far, each way, and what earlier passes had. */
+  private moved = { download: { done: 0, bytes: 0 }, upload: { done: 0, bytes: 0 } }
+  private carried = { download: { done: 0, bytes: 0 }, upload: { done: 0, bytes: 0 } }
+  private inRun = false
+
+  /** Reports progress as part of the whole run. */
+  private progress(p: TransferProgress): void {
+    const before = this.carried[p.direction]
+    const done = before.done + p.done
+    const bytes = before.bytes + p.bytesDone
+    this.moved[p.direction] = { done, bytes }
+    this.options.onProgress?.({
+      ...p,
+      done,
+      total: before.done + p.total,
+      bytesDone: bytes,
+      bytesTotal: before.bytes + p.bytesTotal,
+    })
+  }
   private queued: Promise<void> | null = null
 
   /**
@@ -194,6 +213,18 @@ export class SyncEngine {
   /** Passes until the server has nothing new and this device nothing to send. */
   async syncUntilQuiet(maxPasses = 6): Promise<SyncReport> {
     const total: SyncReport = { pulled: 0, pushed: 0, events: [], again: false }
+    // The bars count the whole run: a second pass adds to what the first did
+    // instead of starting from zero with a total of its own.
+    this.moved = { download: { done: 0, bytes: 0 }, upload: { done: 0, bytes: 0 } }
+    this.inRun = true
+    try {
+      return await this.passesUntilQuiet(total, maxPasses)
+    } finally {
+      this.inRun = false
+    }
+  }
+
+  private async passesUntilQuiet(total: SyncReport, maxPasses: number): Promise<SyncReport> {
     for (let i = 0; i < maxPasses; i++) {
       const report = await this.sync()
       total.pulled += report.pulled
@@ -205,6 +236,12 @@ export class SyncEngine {
   }
 
   private async pass(): Promise<SyncReport> {
+    // A pass on its own (sync(), not syncUntilQuiet()) counts from zero.
+    if (!this.inRun) this.moved = { download: { done: 0, bytes: 0 }, upload: { done: 0, bytes: 0 } }
+    this.carried = {
+      download: { ...this.moved.download },
+      upload: { ...this.moved.upload },
+    }
     const state = await this.loadState()
     const report: SyncReport = { pulled: 0, pushed: 0, events: [], again: false }
     const disk = new Map((await this.options.files.list()).map((stat) => [stat.path, stat]))
@@ -301,7 +338,7 @@ export class SyncEngine {
       await this.applyRemote(state, entry, record, disk, report)
       report.pulled++
       await this.saveState()
-      this.options.onProgress?.({
+      this.progress({
         direction: 'download',
         done: ++done,
         total: todo.length,
@@ -554,7 +591,7 @@ export class SyncEngine {
       report.events.push({ kind: 'pushed', path })
       upload.done++
       upload.bytesDone += stat.size
-      this.options.onProgress?.({ direction: 'upload', ...upload, path })
+      this.progress({ direction: 'upload', ...upload, path })
       return true
     }
 

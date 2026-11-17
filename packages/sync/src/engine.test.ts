@@ -264,4 +264,26 @@ describe('vault grande', () => {
     expect(await win!.files.list()).toHaveLength(12)
     void server
   })
+
+  it('conta o progresso da rodada inteira, sem recomeçar nem diminuir o total', async () => {
+    const server = new MemoryServer()
+    const crypto = await VaultCrypto.create(await createVaultKey())
+    const files = new MemoryFiles()
+    const seen: { done: number; total: number }[] = []
+    const engine = new SyncEngine({
+      files,
+      store: new MemoryStore(),
+      remote: server.remote('pc'),
+      crypto,
+      deviceName: 'pc',
+      onProgress: (p) => p.direction === 'upload' && seen.push({ done: p.done, total: p.total }),
+    })
+    for (let i = 0; i < 20; i++) await files.write(`n${i}.md`, text(String(i)))
+    await engine.syncUntilQuiet()
+    expect(seen.at(-1)).toEqual({ done: 20, total: 20 })
+    for (let i = 1; i < seen.length; i++) {
+      expect(seen[i]!.done).toBeGreaterThanOrEqual(seen[i - 1]!.done)
+      expect(seen[i]!.total).toBeGreaterThanOrEqual(seen[i - 1]!.total)
+    }
+  })
 })

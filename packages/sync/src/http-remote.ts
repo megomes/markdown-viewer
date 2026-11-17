@@ -39,21 +39,55 @@ class HttpError extends Error {
   }
 }
 
+/** Statuses that say "not now", not "no": the same request may well work in a moment. */
+const PASSING = new Set([408, 425, 429, 500, 502, 503, 504])
+/** Waits before each new try, in milliseconds. */
+const RETRY_WAITS = [500, 1500, 4000, 8000]
+
+/**
+ * `fetch`, tried again when the network or the server fails for a moment. A
+ * first sync of a big vault is thousands of requests over many minutes, and
+ * one dropped connection in the middle used to end the whole pass. What still
+ * fails names the request, so the log says which one.
+ */
+async function send(url: string, init: RequestInit, what: string): Promise<Response> {
+  for (let attempt = 0; ; attempt++) {
+    let response: Response | null = null
+    let failure: unknown = null
+    try {
+      response = await fetch(url, init)
+    } catch (error) {
+      failure = error
+    }
+    if (response && !PASSING.has(response.status)) return response
+    if (attempt >= RETRY_WAITS.length) {
+      if (response) return response
+      const reason = failure instanceof Error ? failure.message : String(failure)
+      throw new Error(`${what}: ${reason}`)
+    }
+    await new Promise((done) => setTimeout(done, RETRY_WAITS[attempt]))
+  }
+}
+
 async function call<T>(
   conn: Omit<Connection, 'token'> & { token?: string },
   path: string,
   init: RequestInit = {},
 ): Promise<T> {
-  const response = await fetch(`${conn.server}/v/${conn.vault}/${path}`, {
-    ...init,
-    headers: {
-      ...(init.body && !(init.body instanceof Uint8Array)
-        ? { 'content-type': 'application/json' }
-        : {}),
-      ...(conn.token ? { authorization: `Bearer ${conn.token}` } : {}),
-      ...init.headers,
+  const response = await send(
+    `${conn.server}/v/${conn.vault}/${path}`,
+    {
+      ...init,
+      headers: {
+        ...(init.body && !(init.body instanceof Uint8Array)
+          ? { 'content-type': 'application/json' }
+          : {}),
+        ...(conn.token ? { authorization: `Bearer ${conn.token}` } : {}),
+        ...init.headers,
+      },
     },
-  })
+    `${init.method ?? 'GET'} ${path.split('?')[0]!.replace(/\/[0-9a-f-]{16,}$/i, '/…')}`,
+  )
   if (!response.ok) {
     let message = `HTTP ${response.status}`
     try {
@@ -98,9 +132,11 @@ export function httpRemote(conn: Connection): Remote {
       await call(conn, `chunks/${id}`, { method: 'PUT', body: sealed as BodyInit })
     },
     async getChunk(id) {
-      const response = await fetch(`${conn.server}/v/${conn.vault}/chunks/${id}`, {
-        headers: { authorization: `Bearer ${conn.token}` },
-      })
+      const response = await send(
+        `${conn.server}/v/${conn.vault}/chunks/${id}`,
+        { headers: { authorization: `Bearer ${conn.token}` } },
+        'GET chunks/…',
+      )
       if (!response.ok) throw new HttpError(response.status, 'pedaço não encontrado: ' + id)
       return new Uint8Array(await response.arrayBuffer())
     },

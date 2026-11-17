@@ -62,8 +62,39 @@ interface Running {
 let running: Running | null = null
 let lastProgress = 0
 
-async function runPass(): Promise<void> {
-  if (!running) return
+/** The run under way, and whether something asked for another while it ran. */
+let inFlight: Promise<void> | null = null
+let wanted = false
+
+/**
+ * One run at a time. Asking during a run (a change on the disk, the server
+ * saying something changed, which it also says about this device's own
+ * uploads) is remembered, and makes one more run right after. Without this a
+ * big upload stacked hundreds of runs, each with its own count for the bar,
+ * and one network hiccup brought them all down at once.
+ */
+function runPass(): Promise<void> {
+  if (inFlight) {
+    wanted = true
+    return inFlight
+  }
+  inFlight = (async () => {
+    // A failed run does not go again on its own: the next nudge, the timer or
+    // the network coming back starts one.
+    let ok = true
+    do {
+      wanted = false
+      ok = await onePass()
+    } while (ok && wanted && running)
+  })().finally(() => {
+    inFlight = null
+  })
+  return inFlight
+}
+
+/** Resolves to whether the run got to the end. */
+async function onePass(): Promise<boolean> {
+  if (!running) return false
   set({ status: 'syncing', message: null })
   const started = performance.now()
   try {
@@ -83,6 +114,7 @@ async function runPass(): Promise<void> {
       lastSync: at,
       events: [...events.reverse(), ...view.events].slice(0, 200),
     })
+    return true
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error)
     log.warn('sync', 'passada parou', {
@@ -91,6 +123,7 @@ async function runPass(): Promise<void> {
       online: navigator.onLine,
     })
     set({ status: navigator.onLine ? 'error' : 'offline', message, download: null, upload: null })
+    return false
   }
 }
 
