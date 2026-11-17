@@ -1,6 +1,9 @@
 /**
  * The quick switcher: type part of a name or an alias, Enter opens it. The same
  * idea as Obsidian's `Ctrl+O` and VS Code's `Ctrl+P`.
+ *
+ * The same box picks a destination for the tree's menu: a folder for "Mover
+ * para…", a note for "Mesclar com…".
  */
 
 import { useEffect, useMemo, useRef, useState } from 'react'
@@ -11,9 +14,38 @@ interface Props {
   indexes: Record<string, BaseIndex>
   onOpen: (baseId: string, path: string) => void
   onClose: () => void
+  /** What is listed: anything to open (the default), folders, or notes. */
+  mode?: 'open' | 'folder' | 'note'
+  /** Left out of the list: the note being merged, the folder it is already in. */
+  exclude?: string
+  placeholder?: string
 }
 
-export function QuickOpen({ indexes, onOpen, onClose }: Props) {
+const ROOT_LABEL = 'Raiz do vault'
+
+/** Every folder that holds something, the root included. */
+function foldersOf(index: BaseIndex): string[] {
+  const folders = new Set<string>([''])
+  for (const path of index.paths) {
+    let at = path.lastIndexOf('/')
+    while (at > 0) {
+      const folder = path.slice(0, at)
+      if (folders.has(folder)) break
+      folders.add(folder)
+      at = folder.lastIndexOf('/')
+    }
+  }
+  return [...folders].filter((folder) => !folder.split('/').some((part) => part.startsWith('.')))
+}
+
+export function QuickOpen({
+  indexes,
+  onOpen,
+  onClose,
+  mode = 'open',
+  exclude,
+  placeholder,
+}: Props) {
   const [query, setQuery] = useState('')
   const [selected, setSelected] = useState(0)
   const list = useRef<HTMLUListElement>(null)
@@ -21,18 +53,31 @@ export function QuickOpen({ indexes, onOpen, onClose }: Props) {
   const items = useMemo(() => {
     const out: { baseId: string; path: string; label: string; alias: boolean }[] = []
     for (const [baseId, index] of Object.entries(indexes)) {
-      const files = Object.values(index.files).map((file) => ({
-        path: file.path,
-        aliases: file.aliases,
-      }))
+      if (mode === 'folder') {
+        const folders = foldersOf(index).filter((folder) => folder !== exclude)
+        if (exclude !== '' && (!query || ROOT_LABEL.toLowerCase().includes(query.toLowerCase())))
+          out.push({ baseId, path: '', label: ROOT_LABEL, alias: false })
+        const named = folders.filter(Boolean).map((path) => ({ path, aliases: [] }))
+        for (const item of switcher(query, named, 50)) out.push({ baseId, ...item })
+        continue
+      }
+      const files = Object.values(index.files)
+        .filter((file) => file.path !== exclude)
+        .map((file) => ({ path: file.path, aliases: file.aliases }))
       // Files that are not notes are found by name too: PDFs, pages, images.
-      for (const path of index.paths) {
-        if (!/\.(md|markdown|txt)$/i.test(path)) files.push({ path, aliases: [] })
+      if (mode === 'open') {
+        for (const path of index.paths) {
+          if (!/\.(md|markdown|txt)$/i.test(path)) files.push({ path, aliases: [] })
+        }
+      } else {
+        for (let i = files.length - 1; i >= 0; i--) {
+          if (!/\.(md|markdown)$/i.test(files[i]!.path)) files.splice(i, 1)
+        }
       }
       for (const item of switcher(query, files, 50)) out.push({ baseId, ...item })
     }
     return out.slice(0, 50)
-  }, [indexes, query])
+  }, [indexes, query, mode, exclude])
 
   useEffect(() => {
     list.current?.children[selected]?.scrollIntoView({ block: 'nearest' })
@@ -50,13 +95,13 @@ export function QuickOpen({ indexes, onOpen, onClose }: Props) {
       <div
         className="palette"
         role="dialog"
-        aria-label="Abrir rápido"
+        aria-label={placeholder ?? 'Abrir rápido'}
         onMouseDown={(e) => e.stopPropagation()}
       >
         <input
           className="palette-input"
           autoFocus
-          placeholder="Nome ou apelido da nota…"
+          placeholder={placeholder ?? 'Nome ou apelido da nota…'}
           value={query}
           onChange={(e) => {
             setQuery(e.target.value)

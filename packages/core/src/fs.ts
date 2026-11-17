@@ -35,6 +35,13 @@ export interface LoadedFile {
   version: FileVersion
 }
 
+export interface ScannedFile {
+  /** Relative to the base root, `/`-separated. */
+  path: string
+  size: number
+  modifiedAt: number
+}
+
 export interface FileVersion {
   size: number
   modifiedAt: number
@@ -76,6 +83,12 @@ export interface FileSystem {
   restoreFile(baseId: string, interactive: boolean): Promise<Restored<LooseFile>>
   /** Direct children of `path` inside `base`, already sorted. */
   list(baseId: string, path: string): Promise<Entry[]>
+  /**
+   * Every file in the base with its size and date, in one go, where the
+   * platform can do that natively. The link index uses it instead of a walk
+   * that costs a call per folder and per file.
+   */
+  scan?(baseId: string): Promise<ScannedFile[]>
   read(baseId: string, path: string): Promise<LoadedFile>
   /** The raw bytes, for the files that are not text: images and the like. */
   readBinary(baseId: string, path: string): Promise<Uint8Array>

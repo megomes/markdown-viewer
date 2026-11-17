@@ -2,6 +2,7 @@ import { StrictMode } from 'react'
 import { createRoot } from 'react-dom/client'
 import { isDesktop } from '~/platform'
 import { windowRole } from '~/platform/window-role'
+import { startLogging } from '~/platform/logging'
 import { App } from '~/ui/App'
 import { Dock } from '~/ui/Dock'
 import { Note } from '~/ui/Note'
@@ -19,6 +20,7 @@ if (isDesktop()) document.documentElement.dataset.desktop = 'true'
 // and nothing else in the app has to know.
 const role = windowRole()
 document.documentElement.dataset.window = role
+startLogging(role)
 
 // A panel is told its theme by the app's window, which takes a moment. Until
 // then it follows the system, so that nothing is ever painted with no theme

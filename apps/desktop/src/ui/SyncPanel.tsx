@@ -7,6 +7,7 @@
 import { useEffect, useState } from 'react'
 import QRCode from 'qrcode'
 import type { Base } from '@markdown-viewer/core/fs'
+import type { TransferProgress } from '@markdown-viewer/sync/engine'
 import { fileSystem } from '~/platform'
 import {
   checkSecret,
@@ -103,6 +104,122 @@ export function SyncPanel({ bases, activePath, onVault, onClose }: Props) {
           <Setup bases={bases} onVault={onVault} />
         )}
       </div>
+    </div>
+  )
+}
+
+/**
+ * Obsidian's "Open version history" from the tree: every copy of the file the
+ * sync server keeps, newest first, each one able to come back.
+ */
+export function VersionHistory({ path, onClose }: { path: string; onClose: () => void }) {
+  const [versions, setVersions] = useState<Version[] | null>(null)
+  const [error, setError] = useState<string | null>(null)
+  const [restored, setRestored] = useState<number | null>(null)
+
+  useEffect(() => {
+    let cancelled = false
+    versionsOf(path)
+      .then((list) => !cancelled && setVersions(list))
+      .catch((e: unknown) => !cancelled && setError(e instanceof Error ? e.message : String(e)))
+    return () => {
+      cancelled = true
+    }
+  }, [path])
+
+  useEffect(() => {
+    const onKey = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') onClose()
+    }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [onClose])
+
+  return (
+    <div className="palette-backdrop" onMouseDown={onClose}>
+      <div
+        className="sync-panel"
+        role="dialog"
+        aria-label="Histórico de versões"
+        onMouseDown={(e) => e.stopPropagation()}
+      >
+        <header className="sync-head">
+          <h2>Versões de {path.slice(path.lastIndexOf('/') + 1)}</h2>
+          <button type="button" className="icon-button" onClick={onClose} aria-label="Fechar">
+            ×
+          </button>
+        </header>
+        <div className="sync-body">
+          {error && <p className="sync-error">{error}</p>}
+          {!versions && !error && <p className="sync-note">Buscando no servidor…</p>}
+          {versions && (
+            <ul className="sync-list">
+              {versions.length === 0 && <li>Nenhuma versão no servidor ainda.</li>}
+              {versions.map((version, i) => (
+                <li key={version.seq}>
+                  <span>
+                    {new Date(version.at).toLocaleString('pt-BR')}
+                    {i === 0 ? ' (atual)' : ''} {version.deleted ? '(apagado)' : ''}
+                    <small>
+                      {' '}
+                      {version.meta ? Math.round(version.meta.size / 1024) + ' KB' : ''}
+                    </small>
+                  </span>
+                  {i > 0 && version.meta && (
+                    <button
+                      type="button"
+                      className="viewer-action"
+                      disabled={restored === version.seq}
+                      onClick={() =>
+                        void restoreVersion(version).then(() => setRestored(version.seq))
+                      }
+                    >
+                      {restored === version.seq ? 'Restaurada' : 'Restaurar'}
+                    </button>
+                  )}
+                </li>
+              ))}
+            </ul>
+          )}
+        </div>
+      </div>
+    </div>
+  )
+}
+
+function megabytes(bytes: number): string {
+  return (bytes / 1024 / 1024).toFixed(bytes < 10 * 1024 * 1024 ? 1 : 0).replace('.', ',') + ' MB'
+}
+
+/** One way of a pass: files coming down, or going up with their megabytes. */
+function TransferBar({ label, progress }: { label: string; progress: TransferProgress }) {
+  const share = progress.bytesTotal
+    ? progress.bytesDone / progress.bytesTotal
+    : progress.total
+      ? progress.done / progress.total
+      : 0
+  return (
+    <div className="sync-transfer">
+      <div className="sync-transfer-line">
+        <span>
+          {label} {progress.done} de {progress.total}
+          {progress.bytesTotal
+            ? ` · ${megabytes(progress.bytesDone)} de ${megabytes(progress.bytesTotal)}`
+            : ''}
+        </span>
+        <span>{Math.round(share * 100)}%</span>
+      </div>
+      <div
+        className="sync-bar"
+        role="progressbar"
+        aria-label={label}
+        aria-valuemin={0}
+        aria-valuemax={100}
+        aria-valuenow={Math.round(share * 100)}
+      >
+        <div className="sync-bar-fill" style={{ width: `${share * 100}%` }} />
+      </div>
+      <p className="sync-transfer-path">{progress.path}</p>
     </div>
   )
 }
@@ -436,6 +553,8 @@ function Configured({ activePath }: { activePath: { baseId: string; path: string
   return (
     <div className="sync-body">
       <p className={'sync-status is-' + sync.status}>{label}</p>
+      {sync.download && <TransferBar label="Baixando" progress={sync.download} />}
+      {sync.upload && <TransferBar label="Enviando" progress={sync.upload} />}
       <p className="sync-note">
         Vault <b>{config.vault}</b>, pasta {config.folder}, aparelho {config.deviceName}.
       </p>

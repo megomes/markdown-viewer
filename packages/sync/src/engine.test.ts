@@ -237,3 +237,31 @@ describe('simulação', () => {
     },
   )
 })
+
+describe('vault grande', () => {
+  const text = (value: string) => new TextEncoder().encode(value)
+
+  it('envia muitos arquivos novos de uma vez e o outro aparelho recebe todos', async () => {
+    const { devices } = await setup()
+    const [mac, win] = devices
+    for (let i = 0; i < 40; i++) await mac!.files.write(`Pasta/Nota ${i}.md`, text(`nota ${i}`))
+    const report = await mac!.engine.syncUntilQuiet()
+    expect(report.pushed).toBe(40)
+    await win!.engine.syncUntilQuiet()
+    const got = (await win!.files.list()).map((stat) => stat.path).sort()
+    expect(got).toHaveLength(40)
+    expect(new TextDecoder().decode(await win!.files.read('Pasta/Nota 7.md'))).toBe('nota 7')
+  })
+
+  it('para em vez de apagar tudo quando a pasta aparece vazia', async () => {
+    const { server, devices } = await setup()
+    const [mac, win] = devices
+    for (let i = 0; i < 12; i++) await mac!.files.write(`n${i}.md`, text(String(i)))
+    await settle(devices)
+    for (let i = 0; i < 12; i++) await mac!.files.remove(`n${i}.md`)
+    await expect(mac!.engine.sync()).rejects.toThrow(/vazia/)
+    await win!.engine.syncUntilQuiet()
+    expect(await win!.files.list()).toHaveLength(12)
+    void server
+  })
+})

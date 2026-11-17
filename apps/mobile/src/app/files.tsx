@@ -3,7 +3,8 @@
  * back gesture comes out. Folders first, then files, as on the desktop.
  *
  * The round button makes a note here. Holding a row offers what the desktop's
- * right click does: rename, move, delete.
+ * right click does, Obsidian's file menu: copy, move, favourite, merge, copy
+ * the path, share, rename, delete.
  *
  * As on the desktop, the list shows what is written (notes, HTML, Bases) and
  * gathers the rest of the folder in one line; attachments folders and hidden
@@ -15,6 +16,8 @@ import { useMemo, useState } from 'react'
 import {
   Alert,
   FlatList,
+  Share,
+  ToastAndroid,
   KeyboardAvoidingView,
   Modal,
   Pressable,
@@ -33,7 +36,11 @@ import {
   createFolder,
   createNote,
   dismissNotice,
+  duplicatePath,
+  mergeInto,
   nameProblem,
+  readText,
+  toggleBookmarkPath,
   relocate,
   removePath,
   syncNow,
@@ -44,15 +51,31 @@ import {
 import { useUpdates } from '../updates/updater'
 import { colors, radius } from '../ui/theme'
 import { hasVaultIcon, VaultIcon } from '../ui/VaultIcon'
+import { TransferBar } from '../ui/TransferBar'
 import {
+  Bookmark,
   ChevronRight,
+  ClipboardCopy,
+  Copy,
   FileText,
   Folder,
+  FolderInput,
   FolderPlus,
+  GitMerge,
   LayoutGrid,
+  Link,
+  Pencil,
   Pin,
+  PinOff,
   Settings,
+  Share2,
+  Trash2,
+  Vault,
+  type LucideIcon,
 } from 'lucide-react-native'
+import * as Clipboard from 'expo-clipboard'
+import { obsidianUrl } from '@markdown-viewer/core/bookmarks'
+import { switcher } from '@markdown-viewer/core/search'
 import { accentOf } from '@markdown-viewer/core/environments'
 import { isAttachmentsFolder } from '@markdown-viewer/core/attachments'
 import { viewerOf } from '@markdown-viewer/core/fs'
@@ -89,6 +112,8 @@ type Dialog =
   | { kind: 'actions'; node: TreeNode }
   | { kind: 'rename'; node: TreeNode }
   | { kind: 'move'; node: TreeNode }
+  | { kind: 'merge'; node: TreeNode }
+  | { kind: 'copy'; node: TreeNode }
   | { kind: 'folder' }
 
 export default function Files() {
@@ -221,6 +246,62 @@ export default function Files() {
     )
   }
 
+  const copyText = (text: string, what: string) => {
+    close()
+    void Clipboard.setStringAsync(text).then(() =>
+      ToastAndroid.show(what + ' copiado.', ToastAndroid.SHORT),
+    )
+  }
+
+  const duplicate = (node: TreeNode) => {
+    close()
+    void duplicatePath(node.path).catch((error: unknown) =>
+      Alert.alert('Não deu para copiar', messageOf(error)),
+    )
+  }
+
+  const bookmark = (node: TreeNode) => {
+    close()
+    void toggleBookmarkPath(node.path).catch((error: unknown) =>
+      Alert.alert('Não deu para mudar os favoritos', messageOf(error)),
+    )
+  }
+
+  const share = (node: TreeNode) => {
+    close()
+    void readText(node.path)
+      .then((text) => Share.share({ title: node.name, message: text }))
+      .catch((error: unknown) => Alert.alert('Não deu para compartilhar', messageOf(error)))
+  }
+
+  const confirmMerge = (node: TreeNode, target: string) => {
+    close()
+    const into = target.slice(target.lastIndexOf('/') + 1)
+    Alert.alert(
+      'Mesclar notas?',
+      `O texto de "${node.name}" vai para o fim de "${into}", e "${node.name}" sai do vault. Os links para ela passam a apontar para "${into}".`,
+      [
+        { text: 'Cancelar', style: 'cancel' },
+        {
+          text: 'Mesclar',
+          onPress: () =>
+            void mergeInto(node.path, target).catch((error: unknown) =>
+              Alert.alert('Não deu para mesclar', messageOf(error)),
+            ),
+        },
+      ],
+    )
+  }
+
+  // The notes a note can be merged into, found by name as in the desktop's switcher.
+  const mergeTargets = useMemo(() => {
+    if (dialog?.kind !== 'merge') return []
+    const notes = vault.files
+      .filter((file) => NOTE.test(file.path) && file.path !== dialog.node.path)
+      .map((file) => ({ path: file.path, aliases: [] }))
+    return switcher(typed, notes, 40).map((item) => item.path)
+  }, [dialog, typed, vault.files])
+
   const destinations = useMemo(() => {
     if (dialog?.kind !== 'move') return []
     const node = dialog.node
@@ -267,7 +348,13 @@ export default function Files() {
           ),
         }}
       />
-      {status ? <Text style={styles.status}>{status}</Text> : null}
+      {vault.syncing && vault.progress ? (
+        <View style={styles.transfer}>
+          <TransferBar progress={vault.progress} accent={accent} />
+        </View>
+      ) : status ? (
+        <Text style={styles.status}>{status}</Text>
+      ) : null}
       {vault.notice ? (
         <Pressable style={styles.banner} onPress={dismissNotice}>
           <Text style={styles.bannerText}>{vault.notice} Toque para dispensar.</Text>
@@ -422,10 +509,44 @@ export default function Files() {
                 <Text style={styles.sheetTitle} numberOfLines={1}>
                   {dialog.node.name}
                 </Text>
+                {dialog.node.kind === 'file' ? (
+                  <SheetButton
+                    icon={Copy}
+                    label="Fazer uma cópia"
+                    onPress={() => duplicate(dialog.node)}
+                  />
+                ) : null}
+                <SheetButton
+                  icon={FolderInput}
+                  label="Mover para…"
+                  onPress={() => setDialog({ kind: 'move', node: dialog.node })}
+                />
+                {dialog.node.kind === 'file' ? (
+                  <SheetButton
+                    icon={Bookmark}
+                    label={
+                      vault.bookmarks.includes(dialog.node.path)
+                        ? 'Remover dos favoritos'
+                        : 'Favoritar'
+                    }
+                    onPress={() => bookmark(dialog.node)}
+                  />
+                ) : null}
+                {dialog.node.kind === 'file' && NOTE.test(dialog.node.name) ? (
+                  <SheetButton
+                    icon={GitMerge}
+                    label="Mesclar a nota inteira com…"
+                    onPress={() => {
+                      setTyped('')
+                      setDialog({ kind: 'merge', node: dialog.node })
+                    }}
+                  />
+                ) : null}
                 {dialog.node.kind === 'file' &&
                 dialog.node.fileId &&
                 NOTE.test(dialog.node.name) ? (
                   <SheetButton
+                    icon={vault.pins.includes(dialog.node.fileId) ? PinOff : Pin}
                     label={
                       vault.pins.includes(dialog.node.fileId)
                         ? 'Tirar do widget'
@@ -438,12 +559,85 @@ export default function Files() {
                     }}
                   />
                 ) : null}
-                <SheetButton label="Renomear" onPress={() => startRename(dialog.node)} />
                 <SheetButton
-                  label="Mover para…"
-                  onPress={() => setDialog({ kind: 'move', node: dialog.node })}
+                  icon={ClipboardCopy}
+                  label="Copiar caminho"
+                  more
+                  onPress={() => setDialog({ kind: 'copy', node: dialog.node })}
                 />
-                <SheetButton danger label="Apagar" onPress={() => confirmDelete(dialog.node)} />
+                {dialog.node.kind === 'file' && isWritten(dialog.node.name) ? (
+                  <SheetButton
+                    icon={Share2}
+                    label="Compartilhar"
+                    onPress={() => share(dialog.node)}
+                  />
+                ) : null}
+                <SheetButton
+                  icon={Pencil}
+                  label="Renomear"
+                  onPress={() => startRename(dialog.node)}
+                />
+                <SheetButton
+                  icon={Trash2}
+                  danger
+                  label="Apagar"
+                  onPress={() => confirmDelete(dialog.node)}
+                />
+              </>
+            ) : null}
+
+            {dialog?.kind === 'copy' ? (
+              <>
+                <Text style={styles.sheetTitle} numberOfLines={1}>
+                  Copiar o caminho de "{dialog.node.name}"
+                </Text>
+                <SheetButton
+                  icon={Link}
+                  label="como link do Obsidian"
+                  onPress={() =>
+                    copyText(obsidianUrl(vault.vaultName, dialog.node.path), 'Link do Obsidian')
+                  }
+                />
+                <SheetButton
+                  icon={Vault}
+                  label="a partir do vault"
+                  onPress={() => copyText(dialog.node.path, 'Caminho')}
+                />
+              </>
+            ) : null}
+
+            {dialog?.kind === 'merge' ? (
+              <>
+                <Text style={styles.sheetTitle} numberOfLines={1}>
+                  Mesclar "{dialog.node.name}" com
+                </Text>
+                <TextInput
+                  style={styles.input}
+                  value={typed}
+                  onChangeText={setTyped}
+                  autoFocus
+                  placeholder="Nome da nota"
+                  placeholderTextColor={colors.textTertiary}
+                />
+                <FlatList
+                  style={styles.destinations}
+                  data={mergeTargets}
+                  keyboardShouldPersistTaps="handled"
+                  keyExtractor={(target) => target}
+                  renderItem={({ item }) => (
+                    <Pressable
+                      onPress={() => confirmMerge(dialog.node, item)}
+                      style={({ pressed }) => [styles.destination, pressed && styles.rowPressed]}
+                    >
+                      <Text style={styles.destinationText} numberOfLines={1}>
+                        {item.slice(item.lastIndexOf('/') + 1).replace(NOTE, '')}
+                      </Text>
+                      <Text style={styles.meta} numberOfLines={1}>
+                        {item}
+                      </Text>
+                    </Pressable>
+                  )}
+                />
               </>
             ) : null}
 
@@ -521,18 +715,26 @@ export default function Files() {
 function SheetButton({
   label,
   onPress,
+  icon: Icon,
   danger = false,
+  more = false,
 }: {
   label: string
   onPress: () => void
+  icon?: LucideIcon
   danger?: boolean
+  /** Opens another list, as the desktop's submenus do. */
+  more?: boolean
 }) {
+  const tint = danger ? colors.accentText : colors.textSecondary
   return (
     <Pressable
       onPress={onPress}
       style={({ pressed }) => [styles.sheetButton, pressed && styles.rowPressed]}
     >
+      {Icon ? <Icon size={19} color={tint} strokeWidth={1.75} /> : null}
       <Text style={[styles.sheetButtonText, danger && styles.danger]}>{label}</Text>
+      {more ? <ChevronRight size={17} color={colors.textTertiary} strokeWidth={1.75} /> : null}
     </Pressable>
   )
 }
@@ -546,6 +748,7 @@ const styles = StyleSheet.create({
     paddingBottom: 8,
   },
   headerActions: { flexDirection: 'row', gap: 22, alignItems: 'center' },
+  transfer: { paddingHorizontal: 20, paddingBottom: 10 },
   banner: {
     marginHorizontal: 20,
     marginBottom: 10,
@@ -630,8 +833,15 @@ const styles = StyleSheet.create({
     paddingHorizontal: 10,
     paddingBottom: 8,
   },
-  sheetButton: { paddingHorizontal: 10, paddingVertical: 15, borderRadius: radius.md },
-  sheetButtonText: { color: colors.textPrimary, fontSize: 17 },
+  sheetButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 14,
+    paddingHorizontal: 10,
+    paddingVertical: 13,
+    borderRadius: radius.md,
+  },
+  sheetButtonText: { color: colors.textPrimary, fontSize: 16, flex: 1 },
   danger: { color: colors.accentText },
   input: {
     marginHorizontal: 6,

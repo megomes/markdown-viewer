@@ -3616,3 +3616,66 @@ html[data-window='dock'] .chip {
 .files-move:hover {
   color: var(--accent-text);
 }
+
+.menu-label {
+  display: flex;
+  gap: 0.5rem;
+  align-items: center;
+  min-width: 0;
+  white-space: nowrap;
+}
+
+.menu-icon {
+  flex: none;
+  width: 14px;
+  color: var(--text-tertiary, var(--text-disabled));
+}
+
+.menu-item:hover:not(:disabled) .menu-icon,
+.menu-item.is-open .menu-icon {
+  color: inherit;
+}
+
+.menu-item.is-destructive .menu-icon {
+  color: inherit;
+}
+
+/* ------------------------------------------------- sync transfer bars */
+
+.sync-transfer {
+  display: grid;
+  gap: 0.25rem;
+  margin-bottom: 0.5rem;
+}
+
+.sync-transfer-line {
+  display: flex;
+  justify-content: space-between;
+  gap: 0.75rem;
+  color: var(--text-secondary);
+  font-size: 0.75rem;
+  font-variant-numeric: tabular-nums;
+}
+
+.sync-bar {
+  height: 4px;
+  overflow: hidden;
+  border-radius: 2px;
+  background: var(--surface-hover);
+}
+
+.sync-bar-fill {
+  height: 100%;
+  border-radius: 2px;
+  background: var(--accent, var(--tone-blue));
+  transition: width 200ms ease-out;
+}
+
+.sync-transfer-path {
+  overflow: hidden;
+  margin: 0;
+  color: var(--text-tertiary);
+  font-size: 0.6875rem;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}

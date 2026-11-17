@@ -8,6 +8,7 @@ import { bodyStart } from '~/editor/frontmatter'
 import { outlineOf, sameOutline, type Heading } from '~/editor/outline'
 import { editorExtensions, readOnlyCompartment, readOnlyExtension } from '~/editor/setup'
 import { documentTitle, titleCompartment, type Rename } from '~/editor/title'
+import { log } from '@markdown-viewer/core/log'
 
 /** How long the cursor has to sit still before its position is worth storing. */
 const VIEW_REPORT_DELAY = 400
@@ -173,6 +174,7 @@ export function EditorPane({
     const states = parked.current
     const initialView = getInitialView()
     const restored = states.get(tab.id)
+    const drawing = performance.now()
     const instance = new EditorView({
       state:
         restored && restored.doc.toString() === doc.text
@@ -186,6 +188,15 @@ export function EditorPane({
     })
     view.current = instance
     if (autoFocus) instance.focus()
+    // Measured to the next frame, which is when the note is on screen.
+    requestAnimationFrame(() => {
+      const ms = Math.round(performance.now() - drawing)
+      ;(ms > 250 ? log.info : log.debug)('nota', 'desenhada', {
+        ms,
+        kb: Math.round(doc.text.length / 1024),
+        linhas: instance.state.doc.lines,
+      })
+    })
 
     // A handle for measuring in the browser console during development.
     if (import.meta.env.DEV) (window as unknown as { cm?: EditorView }).cm = instance

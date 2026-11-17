@@ -1,9 +1,14 @@
 /**
  * Obsidian's bookmarks (`.obsidian/bookmarks.json`), read so the favourites the
- * vault already has show up here. Groups are flattened; searches and headings
- * are left out, since there is nothing here yet that would open them.
+ * vault already has show up here, and written so that "Favoritar" in the tree's
+ * menu shows up in Obsidian too. The format lives in `@markdown-viewer/core`.
  */
 
+import {
+  BOOKMARKS_FILE,
+  bookmarkedFiles,
+  toggleBookmark as toggled,
+} from '@markdown-viewer/core/bookmarks'
 import { fileSystem } from '~/platform'
 
 export interface Bookmark {
@@ -12,34 +17,25 @@ export interface Bookmark {
   title: string
 }
 
-interface Item {
-  type?: string
-  path?: string
-  title?: string
-  items?: Item[]
-}
-
-function flatten(items: Item[], into: Item[]): void {
-  for (const item of items) {
-    if (item.type === 'group' && item.items) flatten(item.items, into)
-    else if (item.type === 'file' && item.path) into.push(item)
+async function readText(baseId: string): Promise<string | null> {
+  try {
+    return (await fileSystem().read(baseId, BOOKMARKS_FILE)).text
+  } catch {
+    return null
   }
 }
 
 export async function readBookmarks(baseId: string): Promise<Bookmark[]> {
-  try {
-    const { text } = await fileSystem().read(baseId, '.obsidian/bookmarks.json')
-    const data = JSON.parse(text) as { items?: Item[] }
-    const files: Item[] = []
-    flatten(data.items ?? [], files)
-    return files.map((item) => ({
-      baseId,
-      path: item.path!,
-      title:
-        item.title ||
-        item.path!.slice(item.path!.lastIndexOf('/') + 1).replace(/\.(md|markdown)$/i, ''),
-    }))
-  } catch {
-    return []
-  }
+  return bookmarkedFiles(await readText(baseId)).map((file) => ({ baseId, ...file }))
+}
+
+/** Adds the file to the favourites, or takes it out. Resolves to the new list of that base. */
+export async function toggleBookmark(baseId: string, path: string): Promise<Bookmark[]> {
+  const text = toggled(await readText(baseId), path)
+  await fileSystem().write(baseId, BOOKMARKS_FILE, new TextEncoder().encode(text))
+  return readBookmarks(baseId)
+}
+
+export function isBookmarked(list: Bookmark[], baseId: string, path: string): boolean {
+  return list.some((bookmark) => bookmark.baseId === baseId && bookmark.path === path)
 }

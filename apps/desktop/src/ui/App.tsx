@@ -74,14 +74,41 @@ import { useVaultLinks } from './useVaultLinks'
 import { readFolderIcons, saveFolderIcons } from '~/app/folder-icons'
 import { iconsAfterMove, type IconMap } from '@markdown-viewer/core/icons'
 import { IconPicker } from './IconPicker'
-import { readBookmarks, type Bookmark } from '~/app/bookmarks'
+import { isBookmarked, readBookmarks, toggleBookmark, type Bookmark } from '~/app/bookmarks'
+import { obsidianUrl } from '@markdown-viewer/core/bookmarks'
 import { QuickOpen } from './QuickOpen'
 import { SearchPanel } from './SearchPanel'
 import { CommentPrompt } from './CommentPrompt'
 import { addNoteComment } from '~/app/note-comments'
 import { openTarget } from '~/editor/links'
-import { Cloud, CloudAlert, CloudOff, MessageSquareText, RefreshCw } from 'lucide-react'
-import { SyncPanel } from './SyncPanel'
+import {
+  AppWindow,
+  Bookmark as BookmarkIcon,
+  ClipboardCopy,
+  Cloud,
+  CloudAlert,
+  CloudOff,
+  Copy,
+  ExternalLink,
+  FilePlus,
+  FolderInput,
+  FolderOpen,
+  FolderPlus,
+  GitMerge,
+  HardDrive,
+  History,
+  Layers,
+  Link,
+  MessageSquareText,
+  Pencil,
+  Pin as TreePinIcon,
+  RefreshCw,
+  Smile,
+  SquarePlus,
+  Trash2,
+  Vault,
+} from 'lucide-react'
+import { SyncPanel, VersionHistory } from './SyncPanel'
 import { SpaceStrip } from './SpaceStrip'
 import { EnvironmentSwitcher, type EnvironmentItem } from './EnvironmentSwitcher'
 import {
@@ -222,6 +249,10 @@ export function App() {
     latestIcons.current = iconMaps
   })
   const [iconFor, setIconFor] = useState<Entry | null>(null)
+  /** The tree's "Mover para…" and "Mesclar com…" ask for a destination here. */
+  const [picking, setPicking] = useState<{ mode: 'folder' | 'note'; entry: Entry } | null>(null)
+  /** The file whose versions on the sync server are being looked at. */
+  const [historyOf, setHistoryOf] = useState<string | null>(null)
   // Which root folders of the vault are environments, and the colour of each.
   const [envConfig, setEnvConfig] = useState<EnvironmentsConfig>({ skip: [], colors: {} })
   const latestEnvConfig = useRef(envConfig)
@@ -305,6 +336,10 @@ export function App() {
    */
   const latestPins = useRef<Pin[]>([])
   const togglePinRef = useRef<(target: PinTarget) => void>(() => {})
+  const floatNoteRef = useRef<(target: PinTarget) => void>(() => {})
+  const latestBookmarks = useRef<Bookmark[]>([])
+  const latestSync = useRef<{ baseId: string | null; on: boolean }>({ baseId: null, on: false })
+  const latestBases = useRef<Base[]>([])
   const unpinRef = useRef<(id: string) => void>(() => {})
 
   /**
@@ -464,57 +499,169 @@ export function App() {
   )
 
   /**
-   * The tree's menu, in the order and with the names of Obsidian's file explorer,
-   * less what this app does not have yet (open to the right, in a new window, move
-   * to, bookmark).
+   * The tree's menu, in the order, with the names and the icons of Obsidian's
+   * file explorer. "Abrir à direita" is left out: this app has no split view.
    */
   const menuItems = useCallback(
     (entry: Entry): MenuItem[] => {
       const files = fileSystem()
       const copy = (text: string) => void navigator.clipboard.writeText(text)
       const folder = entry.kind === 'directory'
+      const note = !folder && /\.(md|markdown)$/i.test(entry.name)
       const system = onApple() ? 'Mostrar no Finder' : 'Mostrar no Explorador de Arquivos'
+      const pinTarget = { id: entry.id, baseId: entry.baseId, path: entry.path, name: entry.name }
+      const absolute = files.can.absolutePath ? files.absolutePath(entry.baseId, entry.path) : null
+      const syncing = latestSync.current
+      const vaultName =
+        latestBases.current.find((base) => base.id === entry.baseId)?.name ??
+        entry.baseId.split(/[\\/]/).pop() ??
+        ''
+      const bookmarked = isBookmarked(latestBookmarks.current, entry.baseId, entry.path)
 
-      const create: MenuItem[] = folder
+      const open: MenuItem[] = folder
         ? [
-            { label: 'Nova nota', onSelect: () => void createIn(entry.baseId, entry.path, 'file') },
+            {
+              label: 'Nova nota',
+              icon: FilePlus,
+              onSelect: () => void createIn(entry.baseId, entry.path, 'file'),
+            },
             {
               label: 'Nova pasta',
+              icon: FolderPlus,
               onSelect: () => void createIn(entry.baseId, entry.path, 'folder'),
             },
           ]
         : [
-            { label: 'Abrir em nova aba', onSelect: () => void actions.openFile(entry, false) },
             {
-              label: 'Fazer uma cópia',
-              separated: true,
-              onSelect: () => void actions.duplicateEntry(entry),
+              label: 'Abrir em nova aba',
+              icon: SquarePlus,
+              onSelect: () => void actions.openFile(entry, false),
             },
+            ...(isDesktop() && note
+              ? [
+                  {
+                    label: 'Abrir em nova janela',
+                    icon: AppWindow,
+                    onSelect: () => floatNoteRef.current(pinTarget),
+                  },
+                ]
+              : []),
+          ]
+
+      const organise: MenuItem[] = [
+        ...(folder
+          ? []
+          : [
+              {
+                label: 'Fazer uma cópia',
+                icon: Copy,
+                separated: true,
+                onSelect: () => void actions.duplicateEntry(entry),
+              },
+            ]),
+        {
+          label: 'Mover para…',
+          icon: FolderInput,
+          separated: folder,
+          onSelect: () => setPicking({ mode: 'folder', entry }),
+        },
+        ...(folder
+          ? []
+          : [
+              {
+                label: bookmarked ? 'Remover dos favoritos' : 'Favoritar',
+                icon: BookmarkIcon,
+                onSelect: () =>
+                  void toggleBookmark(entry.baseId, entry.path).then((list) =>
+                    setBookmarks((all) => [
+                      ...all.filter((one) => one.baseId !== entry.baseId),
+                      ...list,
+                    ]),
+                  ),
+              },
+              ...(note
+                ? [
+                    {
+                      label: 'Mesclar a nota inteira com…',
+                      icon: GitMerge,
+                      onSelect: () => setPicking({ mode: 'note', entry }),
+                    },
+                  ]
+                : []),
+              {
+                label: isPinned(latestPins.current, entry.id)
+                  ? 'Desafixar da barra de notas'
+                  : 'Fixar na barra de notas',
+                icon: TreePinIcon,
+                onSelect: () => togglePinRef.current(pinTarget),
+              },
+            ]),
+      ]
+
+      // Copy path, as Obsidian's submenu: the link that opens it in Obsidian,
+      // the path inside the vault, and the whole path on this computer.
+      const paths: MenuItem = {
+        label: 'Copiar caminho',
+        icon: ClipboardCopy,
+        separated: true,
+        submenu: [
+          {
+            label: 'como link do Obsidian',
+            icon: Link,
+            onSelect: () => copy(obsidianUrl(vaultName, entry.path)),
+          },
+          { label: 'a partir do vault', icon: Vault, onSelect: () => copy(entry.path) },
+          {
+            label: 'a partir da raiz do sistema',
+            icon: HardDrive,
+            disabled: !absolute,
+            onSelect: () => copy(absolute ?? entry.path),
+          },
+        ],
+      }
+
+      const history: MenuItem[] = folder
+        ? []
+        : [
             {
-              label: isPinned(latestPins.current, entry.id)
-                ? 'Desafixar da barra de notas'
-                : 'Fixar na barra de notas',
-              onSelect: () =>
-                togglePinRef.current({
-                  id: entry.id,
-                  baseId: entry.baseId,
-                  path: entry.path,
-                  name: entry.name,
-                }),
+              label: 'Abrir histórico de versões',
+              icon: History,
+              separated: true,
+              disabled: !syncing.on || syncing.baseId !== entry.baseId,
+              hint: syncing.on ? undefined : 'sync desligado',
+              onSelect: () => setHistoryOf(entry.path),
             },
           ]
 
-      return [
-        ...create,
-        {
-          label: 'Renomear…',
-          hint: 'F2',
-          separated: folder,
-          onSelect: () => setRenamingId(entry.id),
-        },
-        { label: 'Ícone…', onSelect: () => setIconFor(entry) },
-        // A folder at the root of the vault is an environment unless set aside.
-        ...(folder &&
+      const outside: MenuItem[] = [
+        ...(!folder && absolute && isDesktop()
+          ? [
+              {
+                label: 'Abrir no app padrão',
+                icon: ExternalLink,
+                separated: true,
+                onSelect: () =>
+                  void import('@tauri-apps/plugin-opener')
+                    .then(({ openPath }) => openPath(absolute))
+                    .catch((error: unknown) => console.error('abrir no app padrão:', error)),
+              },
+            ]
+          : []),
+        ...(files.can.reveal
+          ? [
+              {
+                label: system,
+                icon: FolderOpen,
+                separated: folder || !absolute || !isDesktop(),
+                onSelect: () => void actions.revealEntry(entry),
+              },
+            ]
+          : []),
+      ]
+
+      // A folder at the root of the vault is an environment unless set aside.
+      const environment: MenuItem[] =
+        folder &&
         entry.baseId === getVault() &&
         !entry.path.includes('/') &&
         !entry.name.startsWith('.') &&
@@ -524,6 +671,7 @@ export function App() {
               latestEnvConfig.current.skip.includes(entry.name)
                 ? {
                     label: 'Usar como ambiente',
+                    icon: Layers,
                     onSelect: () =>
                       changeEnvironments((config) => ({
                         ...config,
@@ -532,6 +680,7 @@ export function App() {
                   }
                 : {
                     label: 'Não é um ambiente',
+                    icon: Layers,
                     onSelect: () =>
                       changeEnvironments((config) => ({
                         ...config,
@@ -539,24 +688,32 @@ export function App() {
                       })),
                   },
             ]
-          : []),
+          : []
+
+      return [
+        ...open,
+        ...organise,
+        paths,
+        ...history,
+        ...outside,
         {
-          label: 'Copiar caminho relativo',
+          label: 'Mudar ícone',
+          icon: Smile,
           separated: true,
-          onSelect: () => copy(entry.path),
+          onSelect: () => setIconFor(entry),
         },
+        ...environment,
         {
-          label: 'Copiar caminho completo',
-          disabled: !files.can.absolutePath,
-          onSelect: () => copy(files.absolutePath(entry.baseId, entry.path) ?? entry.path),
+          label: 'Renomear…',
+          icon: Pencil,
+          hint: 'F2',
+          separated: true,
+          onSelect: () => setRenamingId(entry.id),
         },
-        ...(files.can.reveal
-          ? [{ label: system, onSelect: () => void actions.revealEntry(entry) }]
-          : []),
         {
           label: 'Excluir',
+          icon: Trash2,
           hint: onApple() ? '⌘⌫' : 'Ctrl+Del',
-          separated: true,
           destructive: true,
           disabled: !files.can.trash,
           onSelect: () => confirmTrash(entry),
@@ -1091,6 +1248,14 @@ export function App() {
     // oxlint-disable-next-line immutability
     togglePinRef.current = dock.togglePin
     // oxlint-disable-next-line immutability
+    floatNoteRef.current = dock.floatNote
+    // oxlint-disable-next-line immutability
+    latestBookmarks.current = bookmarks
+    // oxlint-disable-next-line immutability
+    latestBases.current = state.bases
+    // oxlint-disable-next-line immutability
+    latestSync.current = { baseId: sync.config?.baseId ?? null, on: Boolean(sync.config) }
+    // oxlint-disable-next-line immutability
     unpinRef.current = dock.unpin
   })
 
@@ -1571,7 +1736,7 @@ export function App() {
             // The browser would otherwise print the interface itself.
             if (!activeId) return
             const printing = documentMenu().find((entry) => entry.label.startsWith('Imprimir'))
-            printing?.onSelect()
+            printing?.onSelect?.()
             break
           }
           case 'zoomIn':
@@ -2374,6 +2539,49 @@ export function App() {
           }}
         />
       )}
+
+      {picking && state.index[picking.entry.baseId] && (
+        <QuickOpen
+          indexes={{ [picking.entry.baseId]: state.index[picking.entry.baseId]! }}
+          mode={picking.mode}
+          exclude={
+            picking.mode === 'folder'
+              ? picking.entry.path.slice(0, Math.max(0, picking.entry.path.lastIndexOf('/')))
+              : picking.entry.path
+          }
+          placeholder={
+            picking.mode === 'folder'
+              ? `Mover “${picking.entry.name}” para a pasta…`
+              : `Mesclar “${picking.entry.name}” com a nota…`
+          }
+          onOpen={(_, path) => {
+            const entry = picking.entry
+            if (picking.mode === 'folder') {
+              void actions.moveEntry(entry, path)
+              return
+            }
+            const target = path.slice(path.lastIndexOf('/') + 1)
+            setQuestion({
+              title: 'Mesclar notas',
+              body: `O texto de “${entry.name}” vai para o fim de “${target}”, e “${entry.name}” vai para a lixeira. Os links para ela passam a apontar para “${target}”.`,
+              choices: [
+                { label: 'Cancelar', onSelect: () => setQuestion(null) },
+                {
+                  label: 'Mesclar',
+                  primary: true,
+                  onSelect: () => {
+                    setQuestion(null)
+                    void actions.mergeEntry(entry, path)
+                  },
+                },
+              ],
+            })
+          }}
+          onClose={() => setPicking(null)}
+        />
+      )}
+
+      {historyOf && <VersionHistory path={historyOf} onClose={() => setHistoryOf(null)} />}
 
       {quickOpen && (
         <QuickOpen

@@ -106,11 +106,11 @@ function frontmatterAliases(properties: Record<string, unknown>): string[] {
  * was, so a match in the masked text is a match in the real one.
  */
 export function maskCode(text: string, from = 0): string {
-  const chars = text.split('')
-  const blank = (start: number, end: number) => {
-    for (let i = start; i < end; i++) if (chars[i] !== '\n') chars[i] = ' '
-  }
-  blank(0, from)
+  // The stretches to blank, found first and applied in one pass at the end:
+  // splitting a long note into one string per character cost seconds on a
+  // large vault.
+  const ranges: [number, number][] = []
+  if (from > 0) ranges.push([0, from])
 
   // Fenced code: ``` or ~~~, closed by the same fence or the end of the note.
   const fence = /^([ \t]{0,3})(`{3,}|~{3,})[^\n]*$/gm
@@ -121,21 +121,35 @@ export function maskCode(text: string, from = 0): string {
     const marker = match[2]!
     if (!open) open = { start: index, marker }
     else if (marker[0] === open.marker[0] && marker.length >= open.marker.length) {
-      blank(open.start, index + match[0].length)
+      ranges.push([open.start, index + match[0].length])
       open = null
     }
   }
-  if (open) blank(open.start, text.length)
+  if (open) ranges.push([open.start, text.length])
 
-  const masked = chars.join('')
-  const parts = masked.split('')
+  const masked = blankRanges(text, ranges)
   // Inline code and Obsidian comments, on what is left.
+  const inline: [number, number][] = []
   for (const match of masked.matchAll(/(`+)[^`\n]+?\1|%%[\s\S]*?%%/g)) {
-    for (let i = match.index!; i < match.index! + match[0].length; i++) {
-      if (parts[i] !== '\n') parts[i] = ' '
-    }
+    inline.push([match.index!, match.index! + match[0].length])
   }
-  return parts.join('')
+  return blankRanges(masked, inline)
+}
+
+/** The text with every character in `ranges` but the line breaks made a space. */
+function blankRanges(text: string, ranges: [number, number][]): string {
+  if (ranges.length === 0) return text
+  ranges.sort((a, b) => a[0] - b[0])
+  const out: string[] = []
+  let at = 0
+  for (const [start, end] of ranges) {
+    if (end <= at) continue
+    const from = Math.max(start, at)
+    out.push(text.slice(at, from), text.slice(from, end).replace(/[^\n]/g, ' '))
+    at = end
+  }
+  out.push(text.slice(at))
+  return out.join('')
 }
 
 function splitTarget(inner: string): {
@@ -167,8 +181,7 @@ function safeDecode(text: string): string {
 }
 
 /** Every link and embed in the note, outside code and comments. */
-export function readLinks(text: string, from = 0): LinkRef[] {
-  const masked = maskCode(text, from)
+export function readLinks(text: string, from = 0, masked = maskCode(text, from)): LinkRef[] {
   const links: LinkRef[] = []
 
   for (const match of masked.matchAll(WIKI)) {
@@ -233,7 +246,7 @@ export function readNote(text: string): NoteInfo {
     tags: [...tags],
     headings,
     blockIds,
-    links: readLinks(text, matter.bodyStart),
+    links: readLinks(text, matter.bodyStart, masked),
   }
 }
 

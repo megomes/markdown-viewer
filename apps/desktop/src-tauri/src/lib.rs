@@ -117,6 +117,95 @@ fn move_to_trash(path: String) -> Result<(), String> {
 
 /// Opens the system file manager with the entry selected.
 ///
+/// One file found by `scan_tree`: its path inside the folder, `/`-separated.
+#[derive(serde::Serialize)]
+struct ScannedFile {
+    path: String,
+    size: u64,
+    /// Milliseconds since 1970, the same number the fs plugin's `stat` gives.
+    mtime: u64,
+}
+
+/// Every file under `root`, with its size and date, in one call.
+///
+/// The sync and the link index used to walk the vault from the interface, one
+/// call per folder and one per file, in a row: thousands of round trips on
+/// every pass of a large vault. Here the walk is native and comes back whole.
+/// Links are not followed, so a link to a folder above cannot loop. Folders
+/// named in `skip` (`.git`, `node_modules`) are not walked into at all.
+#[tauri::command]
+async fn scan_tree(root: String, skip: Vec<String>) -> Result<Vec<ScannedFile>, String> {
+    tauri::async_runtime::spawn_blocking(move || scan(std::path::Path::new(&root), &skip))
+        .await
+        .map_err(|e| e.to_string())
+}
+
+fn scan(base: &std::path::Path, skip: &[String]) -> Vec<ScannedFile> {
+    let mut out = Vec::new();
+    let mut pending = vec![base.to_path_buf()];
+    while let Some(dir) = pending.pop() {
+        let Ok(entries) = std::fs::read_dir(&dir) else { continue };
+        for entry in entries.flatten() {
+            let Ok(kind) = entry.file_type() else { continue };
+            let path = entry.path();
+            if kind.is_dir() {
+                if !skip.iter().any(|name| entry.file_name().to_string_lossy() == *name) {
+                    pending.push(path);
+                }
+            } else if kind.is_file() {
+                let Ok(meta) = entry.metadata() else { continue };
+                let mtime = meta
+                    .modified()
+                    .ok()
+                    .and_then(|t| t.duration_since(std::time::UNIX_EPOCH).ok())
+                    .map(|d| d.as_millis() as u64)
+                    .unwrap_or(0);
+                let Ok(relative) = path.strip_prefix(base) else { continue };
+                let path = relative
+                    .components()
+                    .map(|c| c.as_os_str().to_string_lossy().into_owned())
+                    .collect::<Vec<_>>()
+                    .join("/");
+                out.push(ScannedFile { path, size: meta.len(), mtime });
+            }
+        }
+    }
+    out
+}
+
+#[cfg(test)]
+mod scan_tests {
+    use super::scan;
+
+    #[test]
+    fn finds_every_file_with_slash_paths_and_skips_folders() {
+        let root = std::env::temp_dir().join(format!("mv-scan-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&root);
+        std::fs::create_dir_all(root.join("Pasta/Sub")).unwrap();
+        std::fs::create_dir_all(root.join(".obsidian")).unwrap();
+        std::fs::create_dir_all(root.join(".git/objects")).unwrap();
+        std::fs::write(root.join("a.md"), "um").unwrap();
+        std::fs::write(root.join("Pasta/Sub/b c.md"), "dois!").unwrap();
+        std::fs::write(root.join(".obsidian/app.json"), "{}").unwrap();
+        std::fs::write(root.join(".git/objects/x"), "x").unwrap();
+
+        let mut found = scan(&root, &[".git".into()]);
+        found.sort_by(|a, b| a.path.cmp(&b.path));
+        let paths: Vec<_> = found.iter().map(|f| f.path.as_str()).collect();
+        assert_eq!(paths, [".obsidian/app.json", "Pasta/Sub/b c.md", "a.md"]);
+        assert_eq!(found[1].size, 5);
+        let expected = std::fs::metadata(root.join("a.md"))
+            .unwrap()
+            .modified()
+            .unwrap()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap()
+            .as_millis() as u64;
+        assert_eq!(found[2].mtime, expected);
+        let _ = std::fs::remove_dir_all(&root);
+    }
+}
+
 /// Each system has its own way of saying "show me this one", and none of them
 /// is just opening the folder: the point is that the file comes back selected.
 #[tauri::command]
@@ -212,6 +301,7 @@ pub fn run() {
             secret_get,
             secret_delete,
             reveal_in_file_manager,
+            scan_tree,
             open_path,
             take_opened_paths,
             panels::work_area,
@@ -245,13 +335,23 @@ pub fn run() {
                     }
                 });
             }
-            if cfg!(debug_assertions) {
-                app.handle().plugin(
-                    tauri_plugin_log::Builder::default()
-                        .level(log::LevelFilter::Info)
-                        .build(),
-                )?;
-            }
+            // Always on, also in the installed app: a file in the system's log
+            // folder (on Windows %LOCALAPPDATA%\<identifier>\logs), a few
+            // megabytes at most, which is what a slowness report is read from.
+            // The interface writes into it through `src/platform/logging.ts`.
+            app.handle().plugin(
+                tauri_plugin_log::Builder::default()
+                    .level(log::LevelFilter::Info)
+                    .max_file_size(2_000_000)
+                    .rotation_strategy(tauri_plugin_log::RotationStrategy::KeepSome(4))
+                    .targets([
+                        tauri_plugin_log::Target::new(tauri_plugin_log::TargetKind::LogDir {
+                            file_name: Some("markdown-viewer".into()),
+                        }),
+                        tauri_plugin_log::Target::new(tauri_plugin_log::TargetKind::Stdout),
+                    ])
+                    .build(),
+            )?;
             // The updater only exists on the desktop, and the interface is
             // what decides when to look: see `src/app/updates.ts`.
             #[cfg(desktop)]

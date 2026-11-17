@@ -23,6 +23,8 @@ import {
 } from '@markdown-viewer/core/base-index'
 import { decode, encode, type TextShape } from '@markdown-viewer/core/text'
 import { rewriteLinks } from '@markdown-viewer/core/rewrite'
+import { log, timed } from '@markdown-viewer/core/log'
+import { BOOKMARKS_FILE, bookmarkedFiles, toggleBookmark } from '@markdown-viewer/core/bookmarks'
 import type { Entry } from '@markdown-viewer/core/fs'
 import {
   ICONIZE_FILE,
@@ -83,6 +85,10 @@ export interface VaultSnapshot {
   environmentColors: Record<string, string>
   /** File ids of the notes pinned to the widget. */
   pins: string[]
+  /** Paths in Obsidian's favourites (`.obsidian/bookmarks.json`). */
+  bookmarks: string[]
+  /** The vault's name on the sync server, which the Obsidian link carries. */
+  vaultName: string
   /** Where a quick capture goes: the folder chosen, or the one the app picks. */
   captureFolder: string
   syncing: boolean
@@ -105,6 +111,8 @@ let snapshot: VaultSnapshot = {
   environments: [],
   environmentColors: {},
   pins: [],
+  bookmarks: [],
+  vaultName: '',
   captureFolder: '',
   syncing: false,
   progress: null,
@@ -134,6 +142,7 @@ const files = new PhoneFiles()
 let mirror: VaultMirror | null = null
 let stopListening: (() => void) | null = null
 let started = false
+let lastProgress = 0
 
 function vault(): VaultMirror {
   if (!mirror) throw new Error('O vault não está pareado.')
@@ -148,11 +157,19 @@ async function open(paired: Paired): Promise<void> {
     remote: httpRemote(paired.connection),
     crypto,
     deviceName: paired.deviceName,
-    onProgress: (progress) => set({ progress }),
+    // A few times a second at most: every screen redraws on each one, and a
+    // first sync of a big vault reports thousands.
+    onProgress: (progress) => {
+      const now = Date.now()
+      if (now - lastProgress < 250 && progress.done < progress.total) return
+      lastProgress = now
+      set({ progress })
+    },
   })
   set({
     phase: 'ready',
     deviceName: paired.deviceName,
+    vaultName: paired.connection.vault,
     files: await mirror.catalog(),
     folders: await loadEmptyFolders(),
     pending: await mirror.pendingCount(),
@@ -174,8 +191,13 @@ export async function startVault(): Promise<void> {
   })
   try {
     const paired = await loadPaired()
-    if (paired) await open(paired)
-    else set({ phase: 'unpaired' })
+    if (paired) {
+      await timed('vault', 'abrir', () => open(paired))
+      log.info('vault', 'aberto', {
+        arquivos: snapshot.files.length,
+        baixados: snapshot.files.filter((file) => file.local).length,
+      })
+    } else set({ phase: 'unpaired' })
   } catch (error) {
     set({ phase: 'unpaired', error: messageOf(error) })
   }
@@ -224,8 +246,15 @@ export async function syncNow(): Promise<void> {
     return
   }
   set({ syncing: true, error: null })
+  const started = Date.now()
   try {
     const report = await current.sync()
+    const ms = Date.now() - started
+    ;(report.changed || report.conflicts.length || ms > 3000 ? log.info : log.debug)(
+      'sync',
+      'passada',
+      { ms, mudaram: report.changed, conflitos: report.conflicts.length },
+    )
     set({
       files: await current.catalog(),
       pending: await current.pendingCount(),
@@ -238,6 +267,7 @@ export async function syncNow(): Promise<void> {
     void loadVaultSettings().then(refreshCapture)
   } catch (error) {
     // Offline is normal on a phone: what is on the device still opens and still saves.
+    log.warn('sync', 'passada parou', { ms: Date.now() - started, motivo: messageOf(error) })
     set({ error: messageOf(error), pending: await current.pendingCount() })
   } finally {
     set({ syncing: false, progress: null })
@@ -304,7 +334,7 @@ export function isOwnWrite(id: string, hash: string): boolean {
 }
 
 export async function readText(path: string): Promise<string> {
-  const { text, shape } = decode(await readFile(path))
+  const { text, shape } = decode(await timed('nota', 'ler', () => readFile(path), { slowMs: 300 }))
   const id = idAt(path)
   if (id) shapes.set(id, shape)
   return text
@@ -316,7 +346,12 @@ export async function readText(path: string): Promise<string> {
 export async function saveText(id: string, text: string): Promise<void> {
   const file = fileOf(id)
   if (!file) throw new Error('Esta nota não existe mais no vault.')
-  const saved = await vault().write(file.path, encode(text, shapes.get(id) ?? DEFAULT_SHAPE))
+  const saved = await timed(
+    'nota',
+    'salvar',
+    () => vault().write(file.path, encode(text, shapes.get(id) ?? DEFAULT_SHAPE)),
+    { slowMs: 300, fields: { kb: Math.round(text.length / 1024) } },
+  )
   written.set(id, saved.hash)
   await changed()
 }
@@ -463,6 +498,54 @@ async function updateLinks(index: BaseIndex, moved: Map<string, string>): Promis
       // A note that is not on the device keeps its links; the desktop fixes it on its next rename.
     }
   }
+}
+
+/** Obsidian's "Make a copy": the same bytes beside it, as `Nome 2.md`. Resolves to its id. */
+export async function duplicatePath(path: string): Promise<string> {
+  const name = nameOf(path)
+  const dot = name.lastIndexOf('.')
+  const stem = dot > 0 ? name.slice(0, dot) : name
+  const extension = dot > 0 ? name.slice(dot) : ''
+  const folder = parentOf(path)
+  let copy = ''
+  for (let i = 2; ; i++) {
+    copy = join(folder, `${stem} ${i}${extension}`)
+    if (!exists(copy)) break
+  }
+  const file = await vault().write(copy, await readFile(path))
+  await changed()
+  return file.fileId
+}
+
+/**
+ * Obsidian's "Merge entire file with…": the note's text goes to the end of
+ * `target`, the note leaves the vault, and links to it point at `target`.
+ */
+export async function mergeInto(from: string, target: string): Promise<void> {
+  const index = snapshot.index
+  const [source, into] = await Promise.all([readFile(from), readFile(target)])
+  const a = decode(into)
+  const b = decode(source)
+  const joined = a.text.replace(/\s*$/, '') + '\n\n' + b.text.replace(/^\s+/, '')
+  const saved = await vault().write(target, encode(joined, a.shape))
+  const id = idAt(target)
+  if (id) written.set(id, saved.hash)
+  await vault().remove(from)
+  set({ files: await vault().catalog() })
+  await updateLinks(index, new Map([[from, target]]))
+  await changed()
+}
+
+/** Adds the file to Obsidian's favourites, or takes it out. */
+export async function toggleBookmarkPath(path: string): Promise<void> {
+  let text: string | null = null
+  if (snapshot.files.some((file) => file.path === BOOKMARKS_FILE)) {
+    text = decode(await readFile(BOOKMARKS_FILE)).text
+  }
+  const next = toggleBookmark(text, path)
+  await vault().write(BOOKMARKS_FILE, new TextEncoder().encode(next))
+  set({ bookmarks: bookmarkedFiles(next).map((file) => file.path) })
+  await changed()
 }
 
 /** Deletes a note, or a folder with everything in it. */
@@ -623,7 +706,7 @@ export async function capture(input: CaptureInput): Promise<string> {
 let settingsSeen = ''
 let settingsLoading = false
 
-const SETTINGS_FILES = [ICONS_FILE, ICONIZE_FILE, ENVIRONMENTS_FILE]
+const SETTINGS_FILES = [ICONS_FILE, ICONIZE_FILE, ENVIRONMENTS_FILE, BOOKMARKS_FILE]
 
 /**
  * Reads the icons and the environments from the files the desktop keeps in the
@@ -667,6 +750,7 @@ async function loadVaultSettings(): Promise<void> {
       icons,
       environments: environmentsOf(roots, config),
       environmentColors: config.colors,
+      bookmarks: bookmarkedFiles(await text(BOOKMARKS_FILE)).map((file) => file.path),
     })
     if (!missed) settingsSeen = seen
   } finally {
@@ -728,6 +812,8 @@ function reindex(): Promise<void> {
         VAULT_BASE,
         () => {},
         () => false,
+        (stats) =>
+          (stats.totalMs > 500 ? log.info : log.debug)('indice', 'construido', { ...stats }),
       )
       set({ index })
     } while (indexAgain)
@@ -753,6 +839,10 @@ function indexSource(catalog: MirrorFile[]) {
     async stat(_baseId: string, path: string) {
       const file = byPath.get(path)
       return file ? { size: file.size, modifiedAt: file.mtime } : null
+    },
+    /** The whole catalog at once: a walk folder by folder rescans it per folder. */
+    async scan() {
+      return catalog.map((file) => ({ path: file.path, size: file.size, modifiedAt: file.mtime }))
     },
     async read(_baseId: string, path: string) {
       const file = byPath.get(path)

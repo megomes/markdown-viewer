@@ -70,6 +70,8 @@ export interface MirrorStore {
 }
 
 export interface MirrorProgress {
+  /** Coming down from the server, or going up to it. */
+  direction: 'download' | 'upload'
   /** Entries applied in this pass so far, and how many there are. */
   done: number
   total: number
@@ -334,7 +336,7 @@ export class VaultMirror {
         const record = state.files[entry.fileId]
         if (record && entry.seq <= record.seq) return
         const path = await this.apply(state, entry, record, report)
-        this.options.onProgress?.({ done, total: latest.size, path })
+        this.options.onProgress?.({ direction: 'download', done, total: latest.size, path })
         report.changed++
         report.paths.push(path)
         await this.saveState()
@@ -348,6 +350,8 @@ export class VaultMirror {
   private async push(report: MirrorReport): Promise<boolean> {
     const state = await this.loadState()
     let again = false
+    const total = Object.values(state.files).filter((file) => file.pending).length
+    let done = 0
     for (const id of Object.keys(state.files)) {
       const refused = await this.exclusive(async () => {
         const file = state.files[id]
@@ -368,6 +372,7 @@ export class VaultMirror {
             })
         if (!result.ok) return true
         report.pushed++
+        this.options.onProgress?.({ direction: 'upload', done: ++done, total, path: file.path })
         if (deleted) delete state.files[id]
         else {
           file.seq = result.seq

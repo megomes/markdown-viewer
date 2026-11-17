@@ -8,9 +8,12 @@
 
 import { invoke } from '@tauri-apps/api/core'
 import { join } from '@tauri-apps/api/path'
-import { mkdir, readDir, readFile, remove, rename, stat, writeFile } from '@tauri-apps/plugin-fs'
+import { mkdir, readFile, remove, rename, stat, writeFile } from '@tauri-apps/plugin-fs'
 import type { LocalFiles, LocalStat, StateStore, SyncState } from '@markdown-viewer/sync/engine'
 import { IGNORE_FILE, ignoreMatcher } from '@markdown-viewer/sync/ignore'
+
+/** Never walked into: the ignore rules leave everything in them out anyway. */
+export const SKIPPED_FOLDERS = ['.git', 'node_modules', '.trash']
 
 function joinPath(root: string, path: string): string {
   const separator = root.includes('\\') ? '\\' : '/'
@@ -32,20 +35,12 @@ export class TauriSyncFiles implements LocalFiles {
       // no ignore file
     }
     const ignored = ignoreMatcher(extra)
-    const out: LocalStat[] = []
-    const walk = async (dir: string) => {
-      for (const entry of await readDir(dir ? joinPath(this.root, dir) : this.root)) {
-        const path = dir ? dir + '/' + entry.name : entry.name
-        if (ignored(path) || ignored(path + '/')) continue
-        if (entry.isDirectory) await walk(path)
-        else if (entry.isFile) {
-          const info = await stat(joinPath(this.root, path))
-          out.push({ path, size: info.size, mtime: info.mtime ? info.mtime.getTime() : 0 })
-        }
-      }
-    }
-    await walk('')
-    return out
+    // One native walk instead of a call per folder and per file (lib.rs).
+    const files = await invoke<{ path: string; size: number; mtime: number }[]>('scan_tree', {
+      root: this.root,
+      skip: SKIPPED_FOLDERS,
+    })
+    return files.filter((file) => !ignored(file.path))
   }
 
   async read(path: string): Promise<Uint8Array> {

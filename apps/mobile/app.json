@@ -2,7 +2,7 @@
   "expo": {
     "name": "Markdown Viewer",
     "slug": "markdown-viewer",
-    "version": "0.13.0",
+    "version": "0.14.0",
     "scheme": "markdown-viewer",
     "orientation": "default",
     "icon": "./assets/icon.png",
@@ -51,7 +51,7 @@
       [
         "expo-splash-screen",
         {
-          "backgroundColor": "#1b1964",
+          "backgroundColor": "#07061c",
           "image": "./assets/splash-icon.png",
           "imageWidth": 120
         }

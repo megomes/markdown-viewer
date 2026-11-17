@@ -5,7 +5,7 @@
  */
 
 import { useSyncExternalStore } from 'react'
-import type { SyncEvent } from '@markdown-viewer/sync/engine'
+import type { SyncEvent, TransferProgress } from '@markdown-viewer/sync/engine'
 import { isDesktop } from '~/platform'
 
 const CONFIG_KEY = 'markdown-viewer.sync'
@@ -35,6 +35,9 @@ export interface SyncView {
    * Never written to disk.
    */
   recovery: string | null
+  /** How far the pass under way is, each way; null when nothing is moving. */
+  download: TransferProgress | null
+  upload: TransferProgress | null
 }
 
 export let view: SyncView = {
@@ -44,6 +47,8 @@ export let view: SyncView = {
   message: null,
   events: [],
   recovery: null,
+  download: null,
+  upload: null,
 }
 const listeners = new Set<() => void>()
 

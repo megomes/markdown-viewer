@@ -11,13 +11,13 @@
  * is a smaller error than making somebody wait.
  */
 
-import { entryId, isTextFile, type Entry, type FileSystem } from './fs'
+import { entryId, isTextFile, type Entry, type FileSystem, type FileVersion } from './fs'
 import { htmlTitle } from './html'
 import { readNote, type Heading } from './note'
 import { createResolver, type Resolver } from './resolver'
 
 /** The part of the filesystem port the index reads through. */
-export type IndexSource = Pick<FileSystem, 'list' | 'stat' | 'read'>
+export type IndexSource = Pick<FileSystem, 'list' | 'stat' | 'read' | 'scan'>
 
 export interface IndexedFile {
   baseId: string
@@ -58,8 +58,6 @@ export const EMPTY_INDEX: BaseIndex = {
 
 /** Files past this size are listed but not read: they are not notes. */
 const MAX_BYTES = 1024 * 1024
-/** How many files are read at once. */
-const BATCH = 8
 /** Folders that belong to tools, not to the notes. */
 const SKIPPED = new Set(['.obsidian', '.git', '.trash', 'node_modules', '.markdown-viewer'])
 
@@ -143,16 +141,128 @@ export interface IndexProgress {
   (index: BaseIndex): void
 }
 
+/** How a build went, for the logs: where the time of a big vault goes. */
+export interface IndexStats {
+  /** Every file in the base, notes or not. */
+  files: number
+  /** Text files read from the disk this time. */
+  read: number
+  /** Text files whose last reading was still good (same size and date). */
+  reused: number
+  /** Left out: past the size limit, or not readable. */
+  skipped: number
+  listMs: number
+  readMs: number
+  resolveMs: number
+  totalMs: number
+}
+
+/** How many files are read at once. */
+const BATCH = 16
+/** Work done between two pauses for the interface, in milliseconds. */
+const SLICE_MS = 12
+/** How often a partial index is handed out while reading. */
+const PROGRESS_MS = 300
+
+/** What one file gave, kept to be reused while its size and date stay the same. */
+interface Reading {
+  stamp: string
+  file: Omit<IndexedFile, 'links' | 'embeds'>
+  raw: { target: string; embed: boolean }[]
+}
+
+/**
+ * The last reading of each file, per base. An index is built again on every
+ * rename, move and change seen on the disk; reading and parsing only what
+ * changed is what keeps that cheap in a vault of thousands of notes.
+ */
+const readings = new Map<string, Map<string, Reading>>()
+
+/**
+ * The size and date the index last read a file at, or null. The search keeps
+ * the text of a file for as long as this stays the same.
+ */
+export function readingStamp(baseId: string, path: string): string | null {
+  return readings.get(baseId)?.get(path)?.stamp || null
+}
+
+/** Forgets what was read of a base, so the next build reads everything again. */
+export function forgetReadings(baseId: string): void {
+  readings.delete(baseId)
+}
+
+const now = () => (typeof performance !== 'undefined' ? performance.now() : Date.now())
+
+/**
+ * Gives the interface its turn. `setTimeout(0)` is not used: a browser waits at
+ * least 4 ms on it and much longer in a window that is in the background, and
+ * between every batch of a big vault that added up to seconds.
+ */
+export function yieldToHost(): Promise<void> {
+  const immediate = (globalThis as { setImmediate?: (run: () => void) => unknown }).setImmediate
+  if (typeof immediate === 'function') return new Promise((done) => void immediate(() => done()))
+  if (typeof MessageChannel === 'function') {
+    return new Promise((done) => {
+      const channel = new MessageChannel()
+      channel.port1.onmessage = () => done()
+      channel.port2.postMessage(null)
+    })
+  }
+  return new Promise((done) => setTimeout(done, 0))
+}
+
+function readingOf(baseId: string, entry: Entry, text: string, stamp: string): Reading {
+  const note = isNote(entry.name) ? readNote(text) : null
+  return {
+    stamp,
+    raw: note
+      ? note.links
+          .filter((link) => link.target)
+          .map((link) => ({
+            target: link.target,
+            embed: link.kind === 'embed' || link.kind === 'markdown-image',
+          }))
+      : [],
+    file: {
+      baseId,
+      path: entry.path,
+      name: entry.name,
+      title: isHtml(entry.name)
+        ? (htmlTitle(text) ?? entry.name)
+        : (note?.headings[0]?.text ?? entry.name),
+      aliases: note?.aliases ?? [],
+      tags: note?.tags ?? [],
+      properties: note?.properties ?? {},
+      headings: note?.headings ?? [],
+      blockIds: note?.blockIds ?? [],
+    },
+  }
+}
+
 export async function buildIndex(
   source: IndexSource,
   baseId: string,
   onProgress: IndexProgress,
   shouldStop: () => boolean,
+  onStats?: (stats: IndexStats) => void,
 ): Promise<BaseIndex> {
+  const started = now()
   const all: Entry[] = []
-  await collect(source, baseId, '', all)
+  // The size and date of each file, when the platform scanned them all at once.
+  const versions = new Map<string, FileVersion>()
+  const scanned = source.scan ? await source.scan(baseId).catch(() => null) : null
+  if (scanned) {
+    for (const file of scanned) {
+      const parts = file.path.split('/')
+      if (parts.some((part) => part.startsWith('.') || SKIPPED.has(part))) continue
+      const name = parts[parts.length - 1]!
+      all.push({ id: entryId(baseId, file.path), baseId, path: file.path, name, kind: 'file' })
+      versions.set(file.path, { size: file.size, modifiedAt: file.modifiedAt })
+    }
+  } else await collect(source, baseId, '', all)
   // HTML pages enter too: they are first-class here, with a title and backlinks.
   const entries = all.filter((entry) => isTextFile(entry.name) || isHtml(entry.name))
+  const listMs = now() - started
 
   const index: BaseIndex = {
     ...EMPTY_INDEX,
@@ -163,7 +273,11 @@ export async function buildIndex(
   }
   onProgress({ ...index })
 
-  const raw = new Map<string, { target: string; embed: boolean }[]>()
+  const before = readings.get(baseId) ?? new Map<string, Reading>()
+  const after = new Map<string, Reading>()
+  const stats = { read: 0, reused: 0, skipped: 0 }
+  let slice = now()
+  let shown = now()
 
   for (let start = 0; start < entries.length; start += BATCH) {
     if (shouldStop()) return index
@@ -171,64 +285,65 @@ export async function buildIndex(
     await Promise.all(
       entries.slice(start, start + BATCH).map(async (entry) => {
         try {
-          const stamp = await source.stat(baseId, entry.path)
-          if (stamp && stamp.size > MAX_BYTES) return
-          const { text } = await source.read(baseId, entry.path)
-          const note = isNote(entry.name) ? readNote(text) : null
-          raw.set(
-            entry.path,
-            note
-              ? note.links
-                  .filter((link) => link.target)
-                  .map((link) => ({
-                    target: link.target,
-                    embed: link.kind === 'embed' || link.kind === 'markdown-image',
-                  }))
-              : [],
-          )
-          index.files[entry.id] = {
-            baseId,
-            path: entry.path,
-            name: entry.name,
-            title: isHtml(entry.name)
-              ? (htmlTitle(text) ?? entry.name)
-              : (note?.headings[0]?.text ?? entry.name),
-            links: [],
-            embeds: [],
-            aliases: note?.aliases ?? [],
-            tags: note?.tags ?? [],
-            properties: note?.properties ?? {},
-            headings: note?.headings ?? [],
-            blockIds: note?.blockIds ?? [],
+          const version = versions.get(entry.path) ?? (await source.stat(baseId, entry.path))
+          if (version && version.size > MAX_BYTES) {
+            stats.skipped++
+            return
           }
+          const stamp = version ? `${version.size}:${version.modifiedAt}` : ''
+          let reading = stamp ? before.get(entry.path) : undefined
+          if (reading && reading.stamp === stamp) stats.reused++
+          else {
+            const { text } = await source.read(baseId, entry.path)
+            reading = readingOf(baseId, entry, text, stamp)
+            stats.read++
+          }
+          after.set(entry.path, reading)
+          index.files[entry.id] = { ...reading.file, links: [], embeds: [] }
         } catch {
           // A file that cannot be read this time is left out of the index.
+          stats.skipped++
         }
       }),
     )
 
     index.scanned = Math.min(start + BATCH, entries.length)
-    onProgress({ ...index, files: { ...index.files } })
-    // Let the interface breathe between batches.
-    await new Promise((resolve_) => setTimeout(resolve_, 0))
+    if (now() - shown > PROGRESS_MS) {
+      shown = now()
+      onProgress({ ...index, files: { ...index.files } })
+    }
+    if (now() - slice > SLICE_MS) {
+      await yieldToHost()
+      slice = now()
+    }
   }
+  readings.set(baseId, after)
+  const readMs = now() - started - listMs
 
   // Resolution needs every path and alias to be known, so it happens at the end.
+  const resolveStart = now()
   const resolver = resolverOf(index)
-  for (const [path, targets] of raw) {
+  let count = 0
+  for (const [path, reading] of after) {
+    if (++count % 200 === 0 && now() - slice > SLICE_MS) {
+      await yieldToHost()
+      slice = now()
+    }
     const id = entryId(baseId, path)
     const file = index.files[id]
     if (!file) continue
 
     const seen = new Set<string>()
-    for (const { target, embed } of targets) {
+    for (const { target, embed } of reading.raw) {
       const resolved = resolver.resolve(target, path)
       if (resolved && embed) file.embeds.push(resolved)
       if (!resolved || resolved === path || seen.has(resolved)) continue
       seen.add(resolved)
       file.links.push(resolved)
       const key = entryId(baseId, resolved)
-      index.backlinks[key] = [...(index.backlinks[key] ?? []), id]
+      const list = index.backlinks[key]
+      if (list) list.push(id)
+      else index.backlinks[key] = [id]
     }
   }
 
@@ -236,6 +351,15 @@ export async function buildIndex(
   const finished = { ...index }
   resolvers.set(finished, resolver)
   onProgress(finished)
+  const totalMs = now() - started
+  onStats?.({
+    files: all.length,
+    ...stats,
+    listMs: Math.round(listMs),
+    readMs: Math.round(readMs),
+    resolveMs: Math.round(now() - resolveStart),
+    totalMs: Math.round(totalMs),
+  })
   return finished
 }
 

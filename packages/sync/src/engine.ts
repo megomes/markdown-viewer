@@ -111,7 +111,24 @@ export function conflictPath(path: string, device: string, when: Date): string {
   return `${path.slice(0, slash + 1)}${stem} (conflito ${device} ${stamp})${ext}`
 }
 
+/**
+ * How far a pass is, for the progress bars of the sync screens: files coming
+ * down from the server, or going up to it. Bytes are known for what goes up
+ * (the sizes on the disk); what comes down is counted in files.
+ */
+export interface TransferProgress {
+  direction: 'download' | 'upload'
+  done: number
+  total: number
+  bytesDone: number
+  bytesTotal: number
+  /** The file being worked on. */
+  path: string
+}
+
 export interface EngineOptions {
+  /** Called as files come down and go up. */
+  onProgress?: (progress: TransferProgress) => void
   files: LocalFiles
   store: StateStore
   remote: Remote
@@ -132,8 +149,38 @@ export class SyncEngine {
     return this.state
   }
 
-  private async saveState(): Promise<void> {
-    if (this.state) await this.options.store.save(this.state)
+  private saving: Promise<void> = Promise.resolve()
+  private queued: Promise<void> | null = null
+
+  /**
+   * Saves one after the other, and folds a burst into one: files are sent a
+   * few at a time, and a first sync of thousands used to write the whole state
+   * once per file. A save asked for while one is waiting to start is that
+   * same save, which will write the state as it is by then.
+   *
+   * A write the system refuses for a moment (on Windows, an antivirus or the
+   * indexer holding the file just written) is tried again before giving up.
+   */
+  private saveState(): Promise<void> {
+    if (this.queued) return this.queued
+    const next = this.saving
+      .catch(() => {})
+      .then(async () => {
+        this.queued = null
+        if (!this.state) return
+        for (let attempt = 0; ; attempt++) {
+          try {
+            await this.options.store.save(this.state)
+            return
+          } catch (error) {
+            if (attempt >= 4) throw error
+            await new Promise((done) => setTimeout(done, 100 * 2 ** attempt))
+          }
+        }
+      })
+    this.queued = next
+    this.saving = next
+    return next
   }
 
   /** One pass, never two at once: a call during a pass waits for it. */
@@ -161,6 +208,13 @@ export class SyncEngine {
     const state = await this.loadState()
     const report: SyncReport = { pulled: 0, pushed: 0, events: [], again: false }
     const disk = new Map((await this.options.files.list()).map((stat) => [stat.path, stat]))
+    // A folder that lists empty while this device knows files in it is a folder
+    // that is not there (a drive not mounted, a listing that failed), not a
+    // vault somebody emptied. Going on would delete everything on the server.
+    // A vault of a handful of files can still be emptied on purpose.
+    if (disk.size === 0 && Object.keys(state.files).length > EMPTY_GUARD) {
+      throw new Error('A pasta do vault apareceu vazia. O sync parou para não apagar nada.')
+    }
     await this.pull(state, disk, report)
     const after = new Map((await this.options.files.list()).map((stat) => [stat.path, stat]))
     await this.push(state, after, report)
@@ -237,12 +291,24 @@ export class SyncEngine {
     const latest = new Map<string, RemoteEntry>()
     for (const entry of entries) latest.set(entry.fileId, entry)
 
-    for (const entry of latest.values()) {
+    const todo = [...latest.values()].filter((entry) => {
       const record = state.files[entry.fileId]
-      if (record && entry.seq <= record.seq) continue
+      return !record || entry.seq > record.seq
+    })
+    let done = 0
+    for (const entry of todo) {
+      const record = state.files[entry.fileId]
       await this.applyRemote(state, entry, record, disk, report)
       report.pulled++
       await this.saveState()
+      this.options.onProgress?.({
+        direction: 'download',
+        done: ++done,
+        total: todo.length,
+        bytesDone: 0,
+        bytesTotal: 0,
+        path: state.files[entry.fileId]?.path ?? '',
+      })
     }
     if (entries.length) state.cursor = Math.max(state.cursor, entries[entries.length - 1]!.seq)
     await this.saveState()
@@ -372,22 +438,28 @@ export class SyncEngine {
 
   /* ----------------------------------------------------------------- push */
 
-  private async upload(path: string, bytes: Uint8Array, stat: LocalStat): Promise<string> {
+  private async upload(
+    path: string,
+    bytes: Uint8Array,
+    stat: LocalStat,
+    hash: string,
+  ): Promise<string> {
     const { crypto, remote } = this.options
     const pieces = chunk(bytes)
     const ids = pieces.map((piece) => crypto.chunkId(piece))
     const missing = new Set(await remote.missingChunks([...new Set(ids)]))
+    const todo: number[] = []
     for (let i = 0; i < pieces.length; i++) {
-      const id = ids[i]!
-      if (!missing.has(id)) continue
-      await remote.putChunk(id, crypto.seal(pieces[i]!))
-      missing.delete(id)
+      if (missing.delete(ids[i]!)) todo.push(i)
     }
+    await inParallel(todo, CHUNKS_AT_ONCE, async (i) => {
+      await remote.putChunk(ids[i]!, crypto.seal(pieces[i]!))
+    })
     const meta: FileMeta = {
       path,
       size: bytes.length,
       mtime: stat.mtime,
-      hash: crypto.hash(bytes),
+      hash,
       chunks: ids,
     }
     return crypto.sealJson(meta)
@@ -413,26 +485,51 @@ export class SyncEngine {
       }
     }
 
-    // New files, and the ones among them that are a missing file moved.
-    const created: [string, Uint8Array][] = []
-    for (const [path] of disk) if (!tracked.has(path)) created.push([path, await files.read(path)])
+    // New files, and the ones among them that are a missing file moved. Only
+    // their paths are kept: a first sync of a big vault would otherwise hold
+    // every file in memory at once before sending the first. And only a file
+    // the size of one that went missing can be that file moved, so only those
+    // are read to compare.
+    const created = [...disk.keys()].filter((path) => !tracked.has(path))
     const moves: [string, FileRecord, string, Uint8Array][] = []
-    // A copy: matches are taken out of `created` while this runs.
-    for (const [path, bytes] of created.slice()) {
-      const hash = crypto.hash(bytes)
-      const at = missing.findIndex(([, record]) => record.hash === hash)
-      if (at < 0) continue
-      const [id, record] = missing.splice(at, 1)[0]!
-      created.splice(
-        created.findIndex(([p]) => p === path),
-        1,
-      )
-      moves.push([id, record, path, bytes])
+    if (missing.length > 0) {
+      const sizes = new Set(missing.map(([, record]) => record.size))
+      for (const path of created.slice()) {
+        if (!sizes.has(disk.get(path)!.size)) continue
+        const bytes = await files.read(path)
+        const hash = crypto.hash(bytes)
+        const at = missing.findIndex(([, record]) => record.hash === hash)
+        if (at < 0) continue
+        const [id, record] = missing.splice(at, 1)[0]!
+        created.splice(created.indexOf(path), 1)
+        moves.push([id, record, path, bytes])
+      }
     }
 
-    const send = async (id: string, record: FileRecord | null, path: string, bytes: Uint8Array) => {
+    // What this push has to send, for the progress bar.
+    const sizeOf = (path: string) => disk.get(path)?.size ?? 0
+    const upload = {
+      done: 0,
+      total: moves.length + changed.length + created.length,
+      bytesDone: 0,
+      bytesTotal:
+        moves.reduce((n, [, , path]) => n + sizeOf(path), 0) +
+        changed.reduce((n, [, record]) => n + sizeOf(record.path), 0) +
+        created.reduce((n, path) => n + sizeOf(path), 0),
+    }
+
+    let refused = false
+    const send = async (
+      id: string,
+      record: FileRecord | null,
+      path: string,
+      given: Uint8Array | null,
+    ) => {
+      if (refused) return false
       const stat = disk.get(path)!
-      const meta = await this.upload(path, bytes, stat)
+      const bytes = given ?? (await files.read(path))
+      const hash = crypto.hash(bytes)
+      const meta = await this.upload(path, bytes, stat, hash)
       const result = await remote.commit({
         fileId: id,
         parent: record?.seq ?? null,
@@ -441,12 +538,13 @@ export class SyncEngine {
       })
       if (!result.ok) {
         report.again = true
+        refused = true
         return false
       }
       state.files[id] = {
         path,
         seq: result.seq,
-        hash: crypto.hash(bytes),
+        hash,
         size: stat.size,
         mtime: stat.mtime,
       }
@@ -454,6 +552,9 @@ export class SyncEngine {
       await this.saveState()
       report.pushed++
       report.events.push({ kind: 'pushed', path })
+      upload.done++
+      upload.bytesDone += stat.size
+      this.options.onProgress?.({ direction: 'upload', ...upload, path })
       return true
     }
 
@@ -463,7 +564,12 @@ export class SyncEngine {
     }
     for (const [id, record, bytes] of changed)
       if (!(await send(id, record, record.path, bytes))) return
-    for (const [path, bytes] of created) if (!(await send(randomId(), null, path, bytes))) return
+    // New files a few at a time: each one is a handful of round trips to the
+    // server, and one after the other a vault of thousands took many minutes.
+    await inParallel(created, FILES_AT_ONCE, async (path) => {
+      await send(randomId(), null, path, null)
+    })
+    if (refused) return
     for (const [id, record] of missing) {
       const result = await remote.commit({
         fileId: id,
@@ -482,4 +588,24 @@ export class SyncEngine {
       report.events.push({ kind: 'deleted', path: record.path })
     }
   }
+}
+
+/** Past this many known files, a folder that lists empty stops the pass. */
+const EMPTY_GUARD = 10
+/** New files sent at once on a push. */
+const FILES_AT_ONCE = 4
+/** Chunks of one file sent at once. */
+const CHUNKS_AT_ONCE = 4
+
+/** Runs `work` on every item, at most `limit` at a time, in order of start. */
+async function inParallel<T>(
+  items: readonly T[],
+  limit: number,
+  work: (item: T) => Promise<void>,
+): Promise<void> {
+  let next = 0
+  const lane = async () => {
+    while (next < items.length) await work(items[next++]!)
+  }
+  await Promise.all(Array.from({ length: Math.min(limit, items.length) }, lane))
 }

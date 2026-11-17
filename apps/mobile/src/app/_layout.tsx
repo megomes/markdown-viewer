@@ -6,6 +6,11 @@ import { checkForUpdate } from '../updates/updater'
 import { colors } from '../ui/theme'
 import { onShare, takeShared, type Shared } from '../../modules/quick-capture'
 import { holdShare } from '../capture/shared'
+import { startDiagnostics } from '../diagnostics'
+import { installedLabel } from '../updates/updater'
+
+// Before anything else, so the first line of a session is in the log too.
+startDiagnostics(installedLabel())
 
 /** Something shared with the app becomes a capture, ready to be saved. */
 function captureShared(shared: Shared): void {

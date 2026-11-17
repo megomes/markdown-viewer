@@ -12,7 +12,11 @@ import { useEffect } from 'react'
 import { Image, StyleSheet, View } from 'react-native'
 import * as SplashScreen from 'expo-splash-screen'
 
-/** The gradient of the brand, top to bottom. The middle stop is the system screen's colour. */
+/**
+ * The gradient of the brand, top to bottom. The system screen before it is the
+ * flat colour of the bottom stop, almost black: a flat brand blue filling the
+ * whole screen read as a purple slab (feedback of 2026-11-17).
+ */
 export const LAUNCH_GRADIENT = 'linear-gradient(180deg, #3b39a8 0%, #1b1964 42%, #07061c 100%)'
 /** The width the system screen gives the mark (app.json, expo-splash-screen's imageWidth). */
 const MARK = 120
@@ -44,7 +48,7 @@ const styles = StyleSheet.create({
     ...StyleSheet.absoluteFill,
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: '#1b1964',
+    backgroundColor: '#07061c',
     backgroundImage: LAUNCH_GRADIENT,
   },
   mark: { width: MARK, height: MARK },

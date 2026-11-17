@@ -26,6 +26,7 @@ import {
 import type { FileMeta, Remote, RemoteEntry } from '@markdown-viewer/sync/protocol'
 import { fileSystem } from '~/platform'
 import { saveConfig, set, syncAvailable, view, type SyncConfig } from './sync-state'
+import { log } from '@markdown-viewer/core/log'
 import {
   allowFolder,
   secrets,
@@ -59,22 +60,37 @@ interface Running {
 }
 
 let running: Running | null = null
+let lastProgress = 0
 
 async function runPass(): Promise<void> {
   if (!running) return
   set({ status: 'syncing', message: null })
+  const started = performance.now()
   try {
     const report = await running.engine.syncUntilQuiet()
+    const ms = Math.round(performance.now() - started)
+    ;(report.pulled || report.pushed || ms > 2000 ? log.info : log.debug)('sync', 'passada', {
+      ms,
+      recebidos: report.pulled,
+      enviados: report.pushed,
+    })
     const at = Date.now()
     const events = report.events.map((event) => ({ ...event, at }))
     set({
       status: 'idle',
+      download: null,
+      upload: null,
       lastSync: at,
       events: [...events.reverse(), ...view.events].slice(0, 200),
     })
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error)
-    set({ status: navigator.onLine ? 'error' : 'offline', message })
+    log.warn('sync', 'passada parou', {
+      ms: Math.round(performance.now() - started),
+      motivo: message,
+      online: navigator.onLine,
+    })
+    set({ status: navigator.onLine ? 'error' : 'offline', message, download: null, upload: null })
   }
 }
 
@@ -124,6 +140,14 @@ async function start(): Promise<void> {
     remote,
     crypto,
     deviceName: config.deviceName,
+    // The bars in the panel, a few times a second at most: a first sync of a
+    // big vault reports thousands of files.
+    onProgress: (progress) => {
+      const now = Date.now()
+      if (now - lastProgress < 200 && progress.done < progress.total) return
+      lastProgress = now
+      set(progress.direction === 'download' ? { download: progress } : { upload: progress })
+    },
   })
   const stops: (() => void)[] = []
   running = { engine, remote, connection, key, crypto, stops }

@@ -170,6 +170,16 @@ como raízes, três pastas `Files`, projetos da Reasset cheios de código e dado
   (imagens, PDFs, código, dados) fica numa linha "mais N arquivos", que abre só aquela
   pasta. Arquivos e pastas ocultos (`.claude`, `.obsidian`) aparecem, com um ajuste para
   escondê-los, e continuam fora do índice, da busca e dos links.
+- **Menu do arquivo (2026-11-17).** O botão direito na árvore (toque longo no celular) tem
+  o menu de arquivo do Obsidian, com os mesmos ícones: abrir em nova aba, abrir em nova
+  janela (a nota flutuante do desktop), fazer uma cópia, mover para…, favoritar (no
+  `.obsidian/bookmarks.json`, que o Obsidian também lê), mesclar a nota inteira com…
+  (o texto vai para o fim da outra, a nota vai para a lixeira e os links passam a apontar
+  para a outra), copiar caminho (como link `obsidian://`, a partir do vault, a partir da
+  raiz do sistema), histórico de versões (as versões do servidor de sync), abrir no app
+  padrão, mostrar no explorador, mudar ícone, renomear e excluir. "Abrir à direita" fica
+  de fora: o app não tem tela dividida. No celular saem também o que só existe no
+  desktop (nova janela, raiz do sistema, app padrão, histórico) e entra Compartilhar.
 
 ### 6.2 HTML
 
@@ -294,6 +304,28 @@ continua funcionando como reserva em qualquer aparelho). Ficam de fora `.git/`,
 - Celular e tablet: baixam todo texto, HTML e imagem pequena. **PDF e arquivo grande
   só baixam quando abertos**, e ficam em cache. Dá para marcar uma pasta como "sempre
   offline".
+
+**Vault grande (2026-11-17).** Medido no vault real (1,4 GB, 2.596 arquivos, 956 notas)
+e num sintético de 10 mil notas (`npm run bench:index`):
+
+- O índice de links reaproveita o que já leu enquanto tamanho e data do arquivo não
+  mudam, então cada renomeação ou mudança no disco relê só o que mudou (3,4 s viraram
+  0,12 s no vault real; 19 s viraram 0,7 s com 10 mil notas). A primeira leitura também
+  ficou 4 vezes mais rápida.
+- O desktop varre a pasta num comando nativo só (`scan_tree`), no sync e no índice, em
+  vez de uma chamada por pasta e por arquivo.
+- A primeira sincronização não carrega mais todos os arquivos novos na memória antes de
+  enviar: lê cada um na hora de mandar, quatro arquivos por vez. Uma pasta que aparece
+  vazia enquanto o aparelho conhece mais de dez arquivos para o sync, em vez de apagar
+  tudo no servidor.
+- As telas de sync mostram barras de download e upload (no desktop, também em MB).
+
+**Logs.** Os dois apps registram quanto tempo leva o que importa (índice, abrir e salvar
+nota, desenhar nota, reler a árvore, busca, cada passada do sync), os erros sem
+tratamento e, no desktop, cada vez que a interface trava mais de 200 ms. O desktop grava
+num arquivo que gira sozinho (no Windows,
+`%LOCALAPPDATA%i.artell.markdown-viewer\logs\markdown-viewer.log`); o celular guarda as
+últimas 600 linhas e manda por Ajustes > Compartilhar diagnóstico.
 
 **Regra de transição.** Nunca dois motores de sync na mesma pasta. Enquanto o Obsidian
 Sync estiver ligado, o sync novo é testado numa cópia do vault. A troca acontece num dia

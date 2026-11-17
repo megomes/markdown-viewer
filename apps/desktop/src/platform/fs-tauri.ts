@@ -30,6 +30,7 @@ import {
   parentPath,
   type Base,
   type Entry,
+  type ScannedFile,
   type FileSystem,
   type FileVersion,
   type LoadedFile,
@@ -90,6 +91,14 @@ export class TauriFileSystem implements FileSystem {
     }
     this.roots.set(baseId, baseId)
     return { status: 'ok', value: { baseId, name: nativeBaseName(baseId), label: baseId } }
+  }
+
+  async scan(baseId: string): Promise<ScannedFile[]> {
+    const files = await invoke<{ path: string; size: number; mtime: number }[]>('scan_tree', {
+      root: this.absolute(baseId, ''),
+      skip: ['.git', 'node_modules', '.trash'],
+    })
+    return files.map((file) => ({ path: file.path, size: file.size, modifiedAt: file.mtime }))
   }
 
   async list(baseId: string, path: string): Promise<Entry[]> {

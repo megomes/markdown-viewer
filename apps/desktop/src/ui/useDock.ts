@@ -366,6 +366,32 @@ export function useDock(options: DockOptions) {
     }
   }, [closePeek, describe, keepNote, openInApp])
 
+  /**
+   * "Abrir em nova janela" from the tree: the note opens as a kept note, the
+   * window of its own this app has. It is pinned first if it was not, since a
+   * kept note is always one of the squares on the edge.
+   */
+  const floating = useRef<string | null>(null)
+  const float = useCallback(
+    (target: PinTarget) => {
+      const index = latest.current.pins.findIndex((pin) => pin.id === target.id)
+      if (index >= 0) {
+        void keepNote(index)
+        return
+      }
+      floating.current = target.id
+      setPins((current) => addPin(current, target))
+    },
+    [keepNote],
+  )
+  useEffect(() => {
+    if (!floating.current) return
+    const index = pins.findIndex((pin) => pin.id === floating.current)
+    if (index < 0) return
+    floating.current = null
+    void keepNote(index)
+  }, [pins, keepNote])
+
   const toggle = useCallback((target: PinTarget) => {
     setPins((current) =>
       isPinned(current, target.id) ? removePin(current, target.id) : addPin(current, target),
@@ -438,5 +464,12 @@ export function useDock(options: DockOptions) {
     forgetRef.current = forget
   }, [forget])
 
-  return { pins, togglePin: toggle, renamePin: rename, repointPin: repoint, unpin: forget }
+  return {
+    pins,
+    togglePin: toggle,
+    floatNote: float,
+    renamePin: rename,
+    repointPin: repoint,
+    unpin: forget,
+  }
 }

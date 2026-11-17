@@ -35,6 +35,7 @@ import {
   withoutExtension,
 } from '@markdown-viewer/core/fs'
 import { encode, type TextShape } from '@markdown-viewer/core/text'
+import { log, timed } from '@markdown-viewer/core/log'
 import { send } from '~/platform/channel'
 
 /** The shape a note is born with: plain UTF-8, newline endings, no BOM. */
@@ -583,7 +584,13 @@ export function useWorkspace() {
       })
       if (latest.current.docs[entry.id] || viewerOf(entry.name) !== 'note') return
       try {
-        const loaded = await fileSystem().read(entry.baseId, entry.path)
+        const loaded = await timed(
+          'nota',
+          'ler do disco',
+          () => fileSystem().read(entry.baseId, entry.path),
+          { slowMs: 150 },
+        )
+        log.debug('nota', 'aberta', { kb: Math.round(loaded.text.length / 1024) })
         dispatch({
           type: 'doc/loaded',
           id: entry.id,
@@ -696,7 +703,12 @@ export function useWorkspace() {
           dispatch({ type: 'doc/conflicted', id })
           return
         }
-        const version = await fileSystem().write(tab.baseId, tab.path, encode(doc.text, doc.shape))
+        const version = await timed(
+          'nota',
+          'salvar',
+          () => fileSystem().write(tab.baseId, tab.path, encode(doc.text, doc.shape)),
+          { slowMs: 200, fields: { kb: Math.round(doc.text.length / 1024) } },
+        )
         dispatch({ type: 'doc/saved', id, version })
         // The same note may be open on the edge of the screen, and it should
         // stop calling itself unsaved at the same moment this tab does.
@@ -918,6 +930,41 @@ export function useWorkspace() {
     [loadChildren, report],
   )
 
+  /**
+   * Obsidian's "Merge entire file with…": the note's text goes to the end of
+   * `target`, the note goes to the trash, and links to it now point at
+   * `target`. Refused while either side has unsaved changes.
+   */
+  const mergeEntry = useCallback(
+    async (entry: Entry, target: string): Promise<boolean> => {
+      const docs = latest.current.docs
+      if (docs[entry.id]?.dirty || docs[entryId(entry.baseId, target)]?.dirty) {
+        report(new Error('Salve as duas notas antes de mesclar.'))
+        return false
+      }
+      try {
+        const files = fileSystem()
+        const [from, into] = await Promise.all([
+          files.read(entry.baseId, entry.path),
+          files.read(entry.baseId, target),
+        ])
+        const joined = into.text.replace(/\s*$/, '') + '\n\n' + from.text.replace(/^\s+/, '')
+        await files.write(entry.baseId, target, encode(joined, into.shape))
+        await files.trash(entry.baseId, entry.path)
+        dispatch({ type: 'entry/removed', baseId: entry.baseId, path: entry.path })
+        await loadChildren(entry.baseId, parentPath(entry.path))
+        const targetId = entryId(entry.baseId, target)
+        if (latest.current.docs[targetId]) await reload(targetId)
+        await afterMove.current?.(entry.baseId, entry.path, target)
+        return true
+      } catch (error) {
+        report(error)
+        return false
+      }
+    },
+    [loadChildren, reload, report],
+  )
+
   const revealEntry = useCallback(
     async (entry: Entry) => {
       try {
@@ -1058,6 +1105,7 @@ export function useWorkspace() {
    * what. Nothing on screen waits for it: the panel shows how far it got.
    */
   const indexing = useRef(new Set<string>())
+  const indexedOnce = useRef(new Set<string>())
   const indexBase = useCallback(async (baseId: string) => {
     if (indexing.current.has(baseId)) return
     indexing.current.add(baseId)
@@ -1068,6 +1116,15 @@ export function useWorkspace() {
         baseId,
         (index) => dispatch({ type: 'index/progress', baseId, index }),
         () => false,
+        (stats) => {
+          // The first build of a session, and any slow one, are worth a line.
+          const first = !indexedOnce.current.has(baseId)
+          indexedOnce.current.add(baseId)
+          ;(first || stats.totalMs > 500 ? log.info : log.debug)('indice', 'construido', {
+            ...stats,
+            primeira: first,
+          })
+        },
       )
     } finally {
       indexing.current.delete(baseId)
@@ -1087,6 +1144,8 @@ export function useWorkspace() {
   const refreshTree = useCallback(async () => {
     if (refreshing.current) return
     refreshing.current = true
+    const started = performance.now()
+    let folders = 0
     try {
       const changed = new Set<string>()
       for (const base of latest.current.bases) {
@@ -1094,6 +1153,7 @@ export function useWorkspace() {
           const path = pathIn(id, base.id)
           if (path === null) continue
           let entries: Entry[]
+          folders++
           try {
             entries = await fileSystem().list(base.id, path)
           } catch {
@@ -1106,6 +1166,12 @@ export function useWorkspace() {
         }
       }
       for (const baseId of changed) void indexBase(baseId)
+      const ms = Math.round(performance.now() - started)
+      ;(ms > 300 ? log.info : log.debug)('arvore', 'relida', {
+        ms,
+        pastas: folders,
+        mudaram: changed.size,
+      })
     } finally {
       refreshing.current = false
     }
@@ -1351,6 +1417,7 @@ export function useWorkspace() {
       renameDocument,
       duplicateEntry,
       trashEntry,
+      mergeEntry,
       revealEntry,
       collapseAll,
       indexBase,
@@ -1391,6 +1458,7 @@ export function useWorkspace() {
       moveEntry,
       revealEntry,
       trashEntry,
+      mergeEntry,
       watchBases,
       openBase,
       openFile,

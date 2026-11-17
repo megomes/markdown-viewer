@@ -2,7 +2,9 @@
  * Ajustes: which version is installed, the update, and this device's pairing.
  */
 
-import { Alert, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native'
+import { Alert, Pressable, ScrollView, Share, StyleSheet, Text, View } from 'react-native'
+import { diagnosticsText } from '../diagnostics'
+import { TransferBar } from '../ui/TransferBar'
 import { router } from 'expo-router'
 import { unpair, useVault } from '../vault/runtime'
 import { checkForUpdate, installedLabel, installUpdate, useUpdates } from '../updates/updater'
@@ -76,12 +78,32 @@ export default function Settings() {
             <Row label="Arquivos" value={String(vault.files.length)} />
             <Row label="Baixados" value={String(vault.files.filter((file) => file.local).length)} />
             <Row label="Esperando envio" value={String(vault.pending)} />
+            {vault.syncing && vault.progress ? <TransferBar progress={vault.progress} /> : null}
             <Pressable style={styles.secondary} onPress={confirmUnpair}>
               <Text style={[styles.secondaryText, styles.danger]}>Desparear</Text>
             </Pressable>
           </View>
         </>
       ) : null}
+
+      <Text style={styles.section}>Diagnóstico</Text>
+      <View style={styles.card}>
+        <Text style={styles.note}>
+          O registro do que o app fez nas últimas sessões: quanto tempo cada coisa levou e os erros.
+          Mande quando algo estiver lento ou der errado.
+        </Text>
+        <Pressable
+          style={styles.secondary}
+          onPress={() =>
+            void Share.share({
+              title: 'Diagnóstico do Markdown Viewer',
+              message: diagnosticsText(),
+            })
+          }
+        >
+          <Text style={styles.secondaryText}>Compartilhar diagnóstico</Text>
+        </Pressable>
+      </View>
     </ScrollView>
   )
 }

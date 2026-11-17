@@ -55,6 +55,8 @@ const idle: SyncView = {
   message: null,
   events: [],
   recovery: null,
+  download: null,
+  upload: null,
 }
 
 let root: Root | null = null
@@ -116,6 +118,34 @@ describe('o código de recuperação', () => {
 describe('backup e recuperação', () => {
   beforeEach(() => {
     state.view = idle
+  })
+
+  it('mostra as barras de download e upload enquanto uma passada anda', async () => {
+    state.view = {
+      ...idle,
+      status: 'syncing',
+      download: {
+        direction: 'download',
+        done: 3,
+        total: 12,
+        bytesDone: 0,
+        bytesTotal: 0,
+        path: 'a.md',
+      },
+      upload: {
+        direction: 'upload',
+        done: 1,
+        total: 4,
+        bytesDone: 5 * 1024 * 1024,
+        bytesTotal: 20 * 1024 * 1024,
+        path: 'Files/video.mp4',
+      },
+    }
+    await mount()
+    expect(text()).toContain('Baixando 3 de 12')
+    expect(text()).toContain('Enviando 1 de 4 · 5,0 MB de 20 MB')
+    expect(text()).toContain('25%')
+    expect(document.querySelectorAll('[role=progressbar]')).toHaveLength(2)
   })
 
   it('avisa enquanto as chaves não foram guardadas', async () => {
