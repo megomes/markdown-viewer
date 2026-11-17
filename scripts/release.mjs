@@ -117,8 +117,17 @@ if (doAndroid) {
     android,
     { VERSION_CODE: code },
   )
+  // An APK whose number did not take never installs over the one on the
+  // phone ("App não instalado"): checked here, before anything goes out.
+  const built = join(android, 'app', 'build', 'outputs', 'apk', 'release', 'app-release.apk')
+  const tools = join(process.env.ANDROID_HOME ?? join(homedir(), 'Android', 'Sdk'), 'build-tools')
+  const aapt = join(tools, readdirSync(tools).sort().at(-1), windows ? 'aapt2.exe' : 'aapt2')
+  const badging = execFileSync(aapt, ['dump', 'badging', built], { encoding: 'utf8' })
+  const numbered = /versionCode='(\d+)'/.exec(badging)?.[1]
+  if (numbered !== code)
+    fail(`O APK saiu com o número ${numbered}, e não ${code}. Nada foi publicado.`)
   apk = join(tmpdir(), `markdown-viewer-${code}.apk`)
-  copyFileSync(join(android, 'app', 'build', 'outputs', 'apk', 'release', 'app-release.apk'), apk)
+  copyFileSync(built, apk)
 }
 
 const windowsFiles = []

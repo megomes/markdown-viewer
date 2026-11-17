@@ -1,7 +1,7 @@
 /**
  * Signs the release APK with the keystore shared by all of Matheus's Android
- * apps, and numbers it with the CI run, so that each APK installs over the one
- * before it (the OTA runbook in the vault: "Update OTA de app Android pelo
+ * apps, and numbers it with VERSION_CODE, so that each APK installs over the
+ * one before it (the OTA runbook in the vault: "Update OTA de app Android pelo
  * GitHub Releases").
  *
  * The native project is generated (Continuous Native Generation), so this is
@@ -34,21 +34,26 @@ def mvSigned = mvKeystore && mvPassword
 module.exports = function withReleaseSigning(config) {
   return withAppBuildGradle(config, (gradle) => {
     let text = gradle.modResults.contents
-    if (text.includes(MARK)) return gradle
 
     const replace = (pattern, replacement) => {
       if (!pattern.test(text)) throw new Error('with-release-signing: não achei ' + pattern)
       text = text.replace(pattern, replacement)
     }
 
-    replace(/\nandroid \{/, '\n' + SETUP + '\nandroid {')
-    replace(
+    // The build number on its own, every time: a prebuild over an existing
+    // project (`npm run release`, `npm run phone`) writes `versionCode 1` back
+    // from app.json while the rest of this plugin's work is still there, and an
+    // APK numbered 1 never installs over the one on the phone.
+    text = text.replace(
       /versionCode (\d+)/,
       (_, code) => `versionCode((System.getenv('VERSION_CODE') ?: '${code}').toInteger())`,
     )
-    replace(
-      /signingConfigs \{\n/,
-      `signingConfigs {
+
+    if (!text.includes(MARK)) {
+      replace(/\nandroid \{/, '\n' + SETUP + '\nandroid {')
+      replace(
+        /signingConfigs \{\n/,
+        `signingConfigs {
         if (mvSigned) {
             release {
                 storeFile file(mvKeystore)
@@ -58,11 +63,12 @@ module.exports = function withReleaseSigning(config) {
             }
         }
 `,
-    )
-    replace(
-      /(release \{\n(?:\s*\/\/.*\n)*\s*)signingConfig signingConfigs\.debug/,
-      '$1signingConfig mvSigned ? signingConfigs.release : signingConfigs.debug',
-    )
+      )
+      replace(
+        /(release \{\n(?:\s*\/\/.*\n)*\s*)signingConfig signingConfigs\.debug/,
+        '$1signingConfig mvSigned ? signingConfigs.release : signingConfigs.debug',
+      )
+    }
 
     gradle.modResults.contents = text
     return gradle
