@@ -107,7 +107,13 @@ if (doAndroid) {
   // The S25 Ultra and the Tab S10 FE are both arm64.
   run(
     join(android, windows ? 'gradlew.bat' : 'gradlew'),
-    ['assembleRelease', '-PreactNativeArchitectures=arm64-v8a', '--build-cache', '-x', 'lintVitalRelease'],
+    [
+      'assembleRelease',
+      '-PreactNativeArchitectures=arm64-v8a',
+      '--build-cache',
+      '-x',
+      'lintVitalRelease',
+    ],
     android,
     { VERSION_CODE: code },
   )

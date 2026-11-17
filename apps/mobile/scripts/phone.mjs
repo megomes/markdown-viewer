@@ -80,7 +80,13 @@ const code = String(Math.floor((Date.now() / 1000 - 1767225600) / 60))
 console.log(`Compilando o build ${code} para ${abi} (${serial})...`)
 run(
   join(android, windows ? 'gradlew.bat' : 'gradlew'),
-  ['assembleRelease', `-PreactNativeArchitectures=${abi}`, '--build-cache', '-x', 'lintVitalRelease'],
+  [
+    'assembleRelease',
+    `-PreactNativeArchitectures=${abi}`,
+    '--build-cache',
+    '-x',
+    'lintVitalRelease',
+  ],
   android,
   { VERSION_CODE: code },
 )
