@@ -44,7 +44,15 @@ import {
 import { useUpdates } from '../updates/updater'
 import { colors, radius } from '../ui/theme'
 import { hasVaultIcon, VaultIcon } from '../ui/VaultIcon'
-import { ChevronRight, FileText, Folder, LayoutGrid, Pin } from 'lucide-react-native'
+import {
+  ChevronRight,
+  FileText,
+  Folder,
+  FolderPlus,
+  LayoutGrid,
+  Pin,
+  Settings,
+} from 'lucide-react-native'
 import { accentOf } from '@markdown-viewer/core/environments'
 import { isAttachmentsFolder } from '@markdown-viewer/core/attachments'
 import { viewerOf } from '@markdown-viewer/core/fs'
@@ -239,13 +247,20 @@ export default function Files() {
                   setProblem(null)
                   setDialog({ kind: 'folder' })
                 }}
-                hitSlop={10}
+                hitSlop={12}
+                accessibilityRole="button"
+                accessibilityLabel="Nova pasta"
               >
-                <Text style={styles.headerAction}>Nova pasta</Text>
+                <FolderPlus size={22} color={colors.textSecondary} strokeWidth={1.75} />
               </Pressable>
               {folder ? null : (
-                <Pressable onPress={() => router.push('/settings')} hitSlop={10}>
-                  <Text style={styles.headerAction}>Ajustes</Text>
+                <Pressable
+                  onPress={() => router.push('/settings')}
+                  hitSlop={12}
+                  accessibilityRole="button"
+                  accessibilityLabel="Ajustes"
+                >
+                  <Settings size={22} color={colors.textSecondary} strokeWidth={1.75} />
                 </Pressable>
               )}
             </View>
@@ -284,11 +299,21 @@ export default function Files() {
                     delayLongPress={350}
                     style={({ pressed }) => [styles.card, pressed && styles.rowPressed]}
                   >
-                    <View style={[styles.cardTile, { backgroundColor: tint + '33' }]}>
+                    {/* Filled with the environment's colour, lit from the top, as on the desktop. */}
+                    <View
+                      style={[
+                        styles.cardTile,
+                        {
+                          backgroundColor: tint,
+                          backgroundImage: `linear-gradient(160deg, rgba(255,255,255,0.24), rgba(255,255,255,0) 55%), linear-gradient(160deg, ${tint}, ${tint}99)`,
+                          boxShadow: `0 4px 12px ${tint}55`,
+                        },
+                      ]}
+                    >
                       {hasVaultIcon(icon) ? (
-                        <VaultIcon name={icon} size={22} color={tint} />
+                        <VaultIcon name={icon} size={22} color="#ffffff" />
                       ) : (
-                        <LayoutGrid size={22} color={tint} strokeWidth={1.75} />
+                        <LayoutGrid size={22} color="#ffffff" strokeWidth={2} />
                       )}
                     </View>
                     <View style={styles.cardText}>
@@ -520,8 +545,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 20,
     paddingBottom: 8,
   },
-  headerActions: { flexDirection: 'row', gap: 18 },
-  headerAction: { color: colors.textSecondary, fontSize: 14 },
+  headerActions: { flexDirection: 'row', gap: 22, alignItems: 'center' },
   banner: {
     marginHorizontal: 20,
     marginBottom: 10,

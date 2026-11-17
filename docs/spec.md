@@ -407,9 +407,10 @@ Celular e tablet. Nasceu só de leitura; desde 2026-11-15 também edita e cria n
   abre uma nota pronta para salvar: a página vira um link com o título dela, a imagem vira
   anexo. Vai para a pasta de captura, que por padrão é o `Backlog` mais perto da raiz e
   pode ser trocada na própria tela. O nome vem do título, do assunto ou da primeira linha.
-- **Widget** na tela inicial, no espírito do Google Keep: uma linha para escrever uma nota
-  e, embaixo, as notas fixadas ("Fixar no widget", no toque longo), cada uma com o começo
-  do texto e a cor do ambiente. Sem nada fixado, mostra as escritas por último. Os fixados
+- **Widget** na tela inicial, 4x3, no espírito do Google Keep: no topo o logo e o nome
+  (que abrem o app) e o botão de nova nota; embaixo, as notas fixadas (o alfinete no
+  topo da nota, ou "Fixar no widget" no toque longo), cada uma com o começo do texto e a
+  cor do ambiente. Sem nada fixado, mostra as escritas por último. Os fixados
   ficam no aparelho, não no vault. O widget e o compartilhar são o módulo nativo
   `apps/mobile/modules/quick-capture` (Kotlin); o resto é o app.
 
@@ -430,7 +431,10 @@ Celular e tablet. Nasceu só de leitura; desde 2026-11-15 também edita e cria n
 - **Edição no celular** (decidido em 2026-11-15, a pedido do Matheus; antes o app era só
   de leitura). A nota abre para ler e o botão Editar liga a mesma prévia ao vivo do
   desktop, com uma barra de Markdown acima do teclado (título, lista, tarefa, `[[ ]]`,
-  negrito, itálico, foto, imagem, desfazer). O texto salva sozinho. Sem rede, a edição
+  negrito, itálico, foto, imagem, desfazer). A barra é nativa e manda os toques para o
+  editor: dentro da página do editor, o Android engolia o arrasto lateral e ela não
+  rolava. O que entra no começo da linha deixa o cursor depois da marca. O texto salva
+  sozinho. Sem rede, a edição
   fica no aparelho e sobe quando a rede volta. Conflito segue a regra dos computadores:
   texto junta linha a linha; quando as duas pontas mexeram na mesma linha, a versão do
   servidor fica no lugar e a do celular vira `Nota (conflito S25 data).md` ao lado.

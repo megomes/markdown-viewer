@@ -57,7 +57,7 @@ object WidgetStore {
     }
 }
 
-/** The widget: a line to write a note from, and the pinned notes under it. */
+/** The widget: the app's mark, a button to write a note, and the pinned notes under them. */
 class NotesWidgetProvider : AppWidgetProvider() {
   override fun onUpdate(context: Context, manager: AppWidgetManager, ids: IntArray) {
     draw(context, manager, ids)
@@ -113,8 +113,20 @@ class NotesWidgetProvider : AppWidgetProvider() {
           capture,
           PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
         )
-      views.setOnClickPendingIntent(R.id.quick_capture_field, write)
       views.setOnClickPendingIntent(R.id.quick_capture_new, write)
+
+      // The mark and the name open the app where it was left.
+      context.packageManager.getLaunchIntentForPackage(context.packageName)?.let { launch ->
+        views.setOnClickPendingIntent(
+          R.id.quick_capture_open,
+          PendingIntent.getActivity(
+            context,
+            2,
+            launch,
+            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
+          ),
+        )
+      }
       return views
     }
 

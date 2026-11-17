@@ -3,7 +3,7 @@
   "app": {
     "windows": [
       {
-        "title": "markdown-viewer",
+        "title": "Markdown Viewer",
         "width": 1180,
         "height": 780,
         "resizable": true,

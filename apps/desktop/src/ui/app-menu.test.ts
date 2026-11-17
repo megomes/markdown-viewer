@@ -34,7 +34,7 @@ const byLabel = (nodes: MenuNode[], label: string) =>
 describe('o menu do sistema', () => {
   it('tem os menus de sempre', () => {
     expect(labels(plan(vazio))).toEqual([
-      'markdown-viewer',
+      'Markdown Viewer',
       'Arquivo',
       'Editar',
       'Formatar',
@@ -45,7 +45,7 @@ describe('o menu do sistema', () => {
 
   it('fora do Mac não tem o menu do aplicativo', () => {
     const fora = labels(plan(vazio, true, false))
-    expect(fora).not.toContain('markdown-viewer')
+    expect(fora).not.toContain('Markdown Viewer')
     expect(fora[0]).toBe('Arquivo')
     // Sair e Ajustes moram no menu Arquivo quando não há menu do aplicativo.
     expect(labels(submenu(plan(vazio, true, false), 'Arquivo'))).toContain('Sair')

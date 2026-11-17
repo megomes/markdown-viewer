@@ -27,7 +27,8 @@ import * as ImagePicker from 'expo-image-picker'
 import { File } from 'expo-file-system'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import { isTextFile, viewerOf } from '@markdown-viewer/core/fs'
-import NoteEditor from '../dom/NoteEditor'
+import NoteEditor, { type EditorCommand } from '../dom/NoteEditor'
+import { MarkdownBar } from '../ui/MarkdownBar'
 import { bytesToBase64 } from '../vault/base64'
 import { PhoneFiles } from '../vault/storage'
 import {
@@ -40,9 +41,11 @@ import {
   readText,
   relocate,
   saveText,
+  togglePin,
   useVault,
 } from '../vault/runtime'
 import { colors, radius } from '../ui/theme'
+import { Check, Pencil, Pin, PinOff } from 'lucide-react-native'
 
 const files = new PhoneFiles()
 
@@ -111,6 +114,11 @@ export default function Note() {
   const [naming, setNaming] = useState(edit === '1')
   const [shown, setShown] = useState<Shown | null>(null)
   const [saveError, setSaveError] = useState<string | null>(null)
+  const [command, setCommand] = useState<{ id: number; name: EditorCommand } | null>(null)
+  const sendCommand = useCallback(
+    (name: EditorCommand) => setCommand((last) => ({ id: (last?.id ?? 0) + 1, name })),
+    [],
+  )
   const insets = useSafeAreaInsets()
   const keyboard = useKeyboardHeight()
   /** Whether the editor already has a version of this file to write over. */
@@ -235,15 +243,37 @@ export default function Note() {
     setEditing((on) => !on)
     setNaming(false)
   }, [])
+  const pinned = vault.pins.includes(id)
   const headerRight = useCallback(
     () => (
-      <Pressable onPress={toggleEditing} hitSlop={12}>
-        <Text style={[styles.headerAction, editing && styles.headerActionOn]}>
-          {editing ? 'Concluir' : 'Editar'}
-        </Text>
-      </Pressable>
+      <View style={styles.headerActions}>
+        <Pressable
+          onPress={() => void togglePin(id)}
+          hitSlop={12}
+          accessibilityRole="button"
+          accessibilityLabel={pinned ? 'Tirar do widget' : 'Fixar no widget'}
+        >
+          {pinned ? (
+            <PinOff size={21} color={colors.accentText} strokeWidth={1.75} />
+          ) : (
+            <Pin size={21} color={colors.textSecondary} strokeWidth={1.75} />
+          )}
+        </Pressable>
+        <Pressable
+          onPress={toggleEditing}
+          hitSlop={12}
+          accessibilityRole="button"
+          accessibilityLabel={editing ? 'Concluir' : 'Editar'}
+        >
+          {editing ? (
+            <Check size={23} color={colors.accentText} strokeWidth={2.25} />
+          ) : (
+            <Pencil size={21} color={colors.textSecondary} strokeWidth={1.75} />
+          )}
+        </Pressable>
+      </View>
     ),
-    [editing, toggleEditing],
+    [editing, toggleEditing, pinned, id],
   )
 
   return (
@@ -278,6 +308,7 @@ export default function Note() {
             onChange={onChange}
             rename={rename}
             pickImage={pickImage}
+            command={command}
             dom={{ style: { flex: 1, backgroundColor: colors.bgApp } }}
           />
         )
@@ -299,6 +330,7 @@ export default function Note() {
           </Text>
         </View>
       )}
+      {isNote && file && editing && text !== null ? <MarkdownBar onPress={sendCommand} /> : null}
     </View>
   )
 }
@@ -307,8 +339,7 @@ const styles = StyleSheet.create({
   screen: { flex: 1, backgroundColor: colors.bgApp },
   loading: { marginTop: 40 },
   message: { color: colors.textSecondary, fontSize: 15, lineHeight: 22, padding: 20 },
-  headerAction: { color: colors.textSecondary, fontSize: 15 },
-  headerActionOn: { color: colors.accentText, fontWeight: '600' },
+  headerActions: { flexDirection: 'row', alignItems: 'center', gap: 22 },
   saveError: {
     color: colors.accentText,
     fontSize: 13,

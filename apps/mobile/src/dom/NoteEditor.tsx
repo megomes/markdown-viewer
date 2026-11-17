@@ -6,15 +6,16 @@
  * wiki links all come from the same code.
  *
  * It opens for reading. With `editing` on it is the desktop's live preview: the
- * line being written shows its Markdown, the rest stays rendered. A bar of the
- * marks that are slow to reach on a phone's keyboard sits at the bottom.
+ * line being written shows its Markdown, the rest stays rendered. The bar of
+ * marks above the keyboard is native (`ui/MarkdownBar`) and sends its taps in
+ * as `command`.
  *
  * It runs in a web view. What it needs from the phone comes in as props: the
  * text, the vault's paths and aliases for links, and native actions to read a
  * file, open a link, save, rename and pick an image.
  */
 
-import { useEffect, useRef, type ReactNode } from 'react'
+import { useEffect, useRef } from 'react'
 import type { DOMProps } from 'expo/dom'
 import { redo, undo } from '@codemirror/commands'
 import { Annotation, EditorState } from '@codemirror/state'
@@ -22,7 +23,7 @@ import { EditorView, type Command } from '@codemirror/view'
 import { createResolver } from '@markdown-viewer/core/resolver'
 import { isPlainText } from '@markdown-viewer/core/fs'
 import { editorExtensions } from '~/editor/setup'
-import { toggleBold, toggleItalic, toggleTask } from '~/editor/commands'
+import { insertBeforeCaret, toggleBold, toggleItalic, toggleTask } from '~/editor/commands'
 import { documentTitle, requestTitleFocus, titleCompartment } from '~/editor/title'
 import { linksChanged, setLinkOpener, setVaultResolver } from '~/editor/links'
 import { connectFiles } from './platform'
@@ -57,8 +58,13 @@ export interface NoteEditorProps {
   rename: (stem: string) => Promise<string | null>
   /** Resolves to the file name of the picture saved in the vault, or null. */
   pickImage: (source: 'camera' | 'library') => Promise<string | null>
+  /** A tap on the bar above the keyboard. A new `id` runs it once. */
+  command?: { id: number; name: EditorCommand } | null
   dom?: DOMProps
 }
+
+export type EditorCommand =
+  'heading' | 'list' | 'task' | 'link' | 'bold' | 'italic' | 'camera' | 'library' | 'undo' | 'redo'
 
 const HEADING = /^(#{1,6})\s+/
 
@@ -68,10 +74,7 @@ const cycleHeading: Command = (view) => {
   const level = HEADING.exec(line.text)?.[1]?.length ?? 0
   const marks = level >= 3 ? '' : '#'.repeat(level + 1) + ' '
   const old = HEADING.exec(line.text)?.[0].length ?? 0
-  view.dispatch({
-    changes: { from: line.from, to: line.from + old, insert: marks },
-    userEvent: 'input.heading',
-  })
+  insertBeforeCaret(view, { from: line.from, to: line.from + old, insert: marks }, 'input.heading')
   return true
 }
 
@@ -81,12 +84,13 @@ const toggleList: Command = (view) => {
   const line = view.state.doc.lineAt(view.state.selection.main.head)
   const match = LIST.exec(line.text)
   const indent = /^\s*/.exec(line.text)![0].length
-  view.dispatch({
-    changes: match
+  insertBeforeCaret(
+    view,
+    match
       ? { from: line.from + match[1]!.length, to: line.from + match[0].length, insert: '' }
       : { from: line.from + indent, insert: '- ' },
-    userEvent: 'input.list',
-  })
+    'input.list',
+  )
   return true
 }
 
@@ -151,6 +155,7 @@ export default function NoteEditor({
   onChange,
   rename,
   pickImage,
+  command,
 }: NoteEditorProps) {
   const host = useRef<HTMLDivElement>(null)
   const view = useRef<EditorView | null>(null)
@@ -271,14 +276,7 @@ export default function NoteEditor({
     current.dispatch({ changes: changeBetween(shown, text), annotations: fromOutside.of(true) })
   }, [revision, text])
 
-  const run = (command: Command) => () => {
-    const current = view.current
-    if (!current) return
-    if (!current.hasFocus) current.focus()
-    command(current)
-  }
-
-  const attach = (source: 'camera' | 'library') => () => {
+  const attach = (source: 'camera' | 'library') => {
     flush()
     void pickImage(source).then((name) => {
       const current = view.current
@@ -286,66 +284,36 @@ export default function NoteEditor({
     })
   }
 
+  // What the bar above the keyboard sent, run once per tap.
+  const ranCommand = useRef(command?.id ?? 0)
+  useEffect(() => {
+    if (!command || command.id === ranCommand.current) return
+    ranCommand.current = command.id
+    const current = view.current
+    if (!current) return
+    if (command.name === 'camera' || command.name === 'library') {
+      attach(command.name)
+      return
+    }
+    if (!current.hasFocus) current.focus()
+    COMMANDS[command.name](current)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [command])
+
   return (
     <div className={'note' + (editing ? ' is-editing' : '')}>
       <div className="editor reader" ref={host} />
-      {editing ? (
-        <div className="md-bar" role="toolbar" aria-label="Markdown">
-          <Key onPress={run(cycleHeading)} label="Título">
-            H
-          </Key>
-          <Key onPress={run(toggleList)} label="Lista">
-            •—
-          </Key>
-          <Key onPress={run(toggleTask)} label="Tarefa">
-            ☐
-          </Key>
-          <Key onPress={run(wikiLink)} label="Link para nota">
-            [[ ]]
-          </Key>
-          <Key onPress={run(toggleBold)} label="Negrito">
-            <b>B</b>
-          </Key>
-          <Key onPress={run(toggleItalic)} label="Itálico">
-            <i>I</i>
-          </Key>
-          <Key onPress={attach('camera')} label="Tirar foto">
-            Foto
-          </Key>
-          <Key onPress={attach('library')} label="Imagem da galeria">
-            Imagem
-          </Key>
-          <Key onPress={run(undo)} label="Desfazer">
-            ↶
-          </Key>
-          <Key onPress={run(redo)} label="Refazer">
-            ↷
-          </Key>
-        </div>
-      ) : null}
     </div>
   )
 }
 
-function Key({
-  label,
-  onPress,
-  children,
-}: {
-  label: string
-  onPress: () => void
-  children: ReactNode
-}) {
-  return (
-    <button
-      type="button"
-      className="md-key"
-      aria-label={label}
-      // The tap must not take the focus (and the keyboard) away from the text.
-      onMouseDown={(event) => event.preventDefault()}
-      onClick={onPress}
-    >
-      {children}
-    </button>
-  )
+const COMMANDS: Record<Exclude<EditorCommand, 'camera' | 'library'>, Command> = {
+  heading: cycleHeading,
+  list: toggleList,
+  task: toggleTask,
+  link: wikiLink,
+  bold: toggleBold,
+  italic: toggleItalic,
+  undo,
+  redo,
 }

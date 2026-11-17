@@ -110,7 +110,7 @@ jobs:
         with:
           projectPath: apps/desktop
           tagName: ${{ github.ref_name }}
-          releaseName: markdown-viewer __VERSION__
+          releaseName: Markdown Viewer __VERSION__
           releaseBody: Baixe abaixo o pacote do seu sistema.
           # Kept a draft until every platform has uploaded. A release that is
           # already public carries a `latest.json` naming platforms whose files

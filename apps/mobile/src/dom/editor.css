@@ -27,37 +27,3 @@ body,
   padding: 12px 18px 48px;
   max-width: none;
 }
-
-/* The Markdown bar: one row, scrolled sideways, right above the keyboard. */
-.md-bar {
-  flex: none;
-  display: flex;
-  gap: 6px;
-  padding: 6px 10px;
-  overflow-x: auto;
-  scrollbar-width: none;
-  background: var(--bg-sidebar);
-  border-top: 1px solid var(--border-default);
-}
-
-.md-bar::-webkit-scrollbar {
-  display: none;
-}
-
-.md-key {
-  flex: none;
-  min-width: 44px;
-  height: 40px;
-  padding: 0 12px;
-  border: 1px solid var(--border-default);
-  border-radius: 10px;
-  background: var(--surface-2);
-  color: var(--text-primary);
-  font: 500 15px var(--font-ui);
-  -webkit-tap-highlight-color: transparent;
-  touch-action: manipulation;
-}
-
-.md-key:active {
-  background: var(--surface-hover);
-}

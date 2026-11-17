@@ -42,6 +42,17 @@ crop = round(SIZE * 0.14)
 mark = logo.crop((crop, crop, SIZE - crop, SIZE - crop)).resize((96, 96), Image.LANCZOS)
 rounded(mark, 0.24).save(DESKTOP / 'src' / 'ui' / 'brand.png')
 
+# The mark in the middle of the Android launch screen, on the app's own background.
+splash_mark = logo.crop((crop, crop, SIZE - crop, SIZE - crop)).resize((512, 512), Image.LANCZOS)
+rounded(splash_mark, 0.24).save(MOBILE / 'assets' / 'splash-icon.png')
+
+# The same mark, larger, at the top of the Android widget.
+widget_mark = logo.crop((crop, crop, SIZE - crop, SIZE - crop)).resize((144, 144), Image.LANCZOS)
+rounded(widget_mark, 0.24).save(
+    MOBILE / 'modules' / 'quick-capture' / 'android' / 'src' / 'main' / 'res' / 'drawable-nodpi'
+    / 'quick_capture_logo.png'
+)
+
 # Android, legacy icon and stores: the full square.
 logo.save(MOBILE / 'assets' / 'icon.png')
 

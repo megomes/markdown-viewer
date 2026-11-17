@@ -86,7 +86,7 @@ export function menuPlan({ recents, hasDocument, apple }: MenuInput): MenuNode[]
     ? [
         {
           kind: 'submenu',
-          label: 'markdown-viewer',
+          label: 'Markdown Viewer',
           items: [
             { kind: 'native', label: 'Sobre', item: 'About' },
             { kind: 'separator' },

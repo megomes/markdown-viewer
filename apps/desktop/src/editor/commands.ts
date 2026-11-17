@@ -1,5 +1,16 @@
-import { EditorSelection } from '@codemirror/state'
-import type { Command } from '@codemirror/view'
+import { EditorSelection, type ChangeSpec } from '@codemirror/state'
+import type { Command, EditorView } from '@codemirror/view'
+
+/**
+ * Applies changes that put something at the start of lines, with the caret
+ * after what was put there. Mapped the default way, a caret standing exactly
+ * where `# ` or `- [ ] ` goes in (an empty line) would stay in front of it, and
+ * what is typed next would land before the mark.
+ */
+export function insertBeforeCaret(view: EditorView, changes: ChangeSpec, userEvent: string): void {
+  const set = view.state.changes(changes)
+  view.dispatch({ changes: set, selection: view.state.selection.map(set, 1), userEvent })
+}
 
 const TASK = /^(\s*(?:[-*+]|\d+[.)])\s+)(\[[ xX]\]\s*)?/
 
@@ -31,7 +42,7 @@ export const toggleTask: Command = (view) => {
   }
 
   if (changes.length === 0) return false
-  view.dispatch({ changes, userEvent: 'input.toggleTask' })
+  insertBeforeCaret(view, changes, 'input.toggleTask')
   return true
 }
 

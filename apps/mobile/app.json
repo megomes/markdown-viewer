@@ -1,8 +1,8 @@
 {
   "expo": {
-    "name": "markdown-viewer",
+    "name": "Markdown Viewer",
     "slug": "markdown-viewer",
-    "version": "0.12.0",
+    "version": "0.13.0",
     "scheme": "markdown-viewer",
     "orientation": "default",
     "icon": "./assets/icon.png",
@@ -48,6 +48,14 @@
     },
     "plugins": [
       "expo-router",
+      [
+        "expo-splash-screen",
+        {
+          "backgroundColor": "#1b1964",
+          "image": "./assets/splash-icon.png",
+          "imageWidth": 120
+        }
+      ],
       "expo-secure-store",
       "react-native-libsodium",
       [

@@ -16,7 +16,7 @@ use crate::panels;
 pub const NEW_NOTE_EVENT: &str = "tray:new-note";
 
 pub fn install(app: &tauri::AppHandle) -> tauri::Result<()> {
-    let open = MenuItem::with_id(app, "open", "Abrir o markdown-viewer", true, None::<&str>)?;
+    let open = MenuItem::with_id(app, "open", "Abrir o Markdown Viewer", true, None::<&str>)?;
     let note = MenuItem::with_id(app, "note", "Nova nota", true, None::<&str>)?;
     let quit = MenuItem::with_id(app, "quit", "Sair", true, None::<&str>)?;
     let menu = Menu::with_items(
@@ -28,7 +28,7 @@ pub fn install(app: &tauri::AppHandle) -> tauri::Result<()> {
         .icon(app.default_window_icon().cloned().ok_or_else(|| {
             tauri::Error::AssetNotFound("o ícone do app, para a bandeja".to_string())
         })?)
-        .tooltip("markdown-viewer")
+        .tooltip("Markdown Viewer")
         .menu(&menu)
         // On Windows and Linux the menu belongs to the right button and the
         // left one opens the app, which is what every app there does. A Mac

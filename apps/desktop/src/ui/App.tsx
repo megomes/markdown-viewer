@@ -1286,7 +1286,7 @@ export function App() {
   // unsaved in it.
   useEffect(() => {
     const name = activeTab?.name
-    document.title = name ? (activeDoc?.dirty ? '• ' + name : name) : 'markdown-viewer'
+    document.title = name ? (activeDoc?.dirty ? '• ' + name : name) : 'Markdown Viewer'
   }, [activeTab?.name, activeDoc?.dirty])
 
   // Files handed over by the system, from a double click in the file manager
@@ -1732,7 +1732,7 @@ export function App() {
       <aside className="sidebar">
         <div className="brand" data-drag-window>
           <BrandMark />
-          <span className="brand-name">markdown-viewer</span>
+          <span className="brand-name">Markdown Viewer</span>
         </div>
         <SpaceStrip
           spaces={spaces.filter((one) => one.kind !== 'env')}

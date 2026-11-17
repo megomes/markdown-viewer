@@ -130,7 +130,7 @@ function backupText(config: SyncConfig, setupCode: string | null, recovery: stri
     `Código de recuperação: ${recovery ?? '(o que o app mostrou ao criar o vault, ou gere um novo em Sincronização > Backup e recuperação)'}`,
     '',
     'Para recuperar num computador novo:',
-    '1. Instale o markdown-viewer e abra Sincronização > Entrar num vault.',
+    '1. Instale o Markdown Viewer e abra Sincronização > Entrar num vault.',
     '2. Escolha uma pasta vazia e digite o nome do vault acima.',
     '3. No campo do código, cole o código de configuração.',
     '4. Digite a senha do vault. Sem a senha, use o código de recuperação.',
