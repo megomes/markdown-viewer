@@ -21,13 +21,19 @@ jobs:
       - run: npm run format:check
       - run: npm run verify
 
+  # On Linux: macOS runners are the slowest to come, and a release waiting on
+  # one behind this check was what held the deploys up.
   desktop:
     name: Compila o lado Rust
-    runs-on: macos-latest
+    runs-on: ubuntu-22.04
     steps:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
       - uses: swatinem/rust-cache@v2
         with:
           workspaces: apps/desktop/src-tauri
+      - name: Instala as dependências de sistema do Linux
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libwebkit2gtk-4.1-dev libayatana-appindicator3-dev librsvg2-dev patchelf
       - run: cargo check --manifest-path apps/desktop/src-tauri/Cargo.toml

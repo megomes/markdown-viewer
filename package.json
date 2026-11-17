@@ -10,6 +10,8 @@
   "scripts": {
     "dev": "npm run dev -w apps/desktop",
     "dev:desktop": "npm run dev:desktop -w apps/desktop",
+    "phone": "npm run phone -w apps/mobile --",
+    "release": "node scripts/release.mjs",
     "build:desktop": "npm run build:desktop -w apps/desktop",
     "tauri": "npm run tauri -w apps/desktop --",
     "icon": "npm run icon -w apps/desktop",

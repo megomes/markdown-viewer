@@ -19,7 +19,7 @@ repositório. Nunca no código.
 
 ## Preparo, uma vez só
 
-São três passos, e depois deles toda release sai só com uma tag.
+São três passos, e depois deles toda release sai com um comando.
 
 ### 1. Gerar o par de chaves
 
@@ -51,24 +51,50 @@ O `gh` pergunta a senha na segunda linha e não a mostra na tela.
 
 ## Publicar uma versão
 
-1. Suba o campo `version` de `apps/desktop/src-tauri/tauri.conf.json`. **A tag e esse campo
-   têm que dizer o mesmo número**, e o workflow reprova antes de compilar se
-   discordarem.
-2. Faça o commit e marque:
+1. Suba a versão (`tauri.conf.json`, `Cargo.toml`, `apps/mobile/app.json` e os outros
+   lugares de sempre) e faça o commit na `main`, já enviado ao GitHub.
+2. No Windows, na raiz:
 
 ```bash
-git tag v0.2.0 && git push origin main --tags
+npm run release
 ```
 
-O workflow faz o resto. Ele compila para macOS Apple Silicon, macOS Intel,
-Linux e Windows, assina cada pacote, monta o `latest.json` e só então publica a
-release.
+O script compila **neste computador** o instalador do Windows e o APK do celular, onde
+os caches estão quentes: com os caches prontos, o APK sai em menos de meio minuto, contra uns 13 no
+GitHub. Depois ele marca a tag `v0.X.Y`, publica o APK (já no ar) e cria a release do
+desktop em rascunho, com o Windows e o `latest.json`.
 
-O workflow cria a release como rascunho de propósito. Enquanto os quatro
-sistemas compilam, o `latest.json` já existe e já nomeia pacotes que ainda não
-subiram. Um app que perguntasse nessa janela receberia a oferta de uma versão
-que não tem como baixar. O rascunho fecha essa janela, porque a release só fica
-visível quando o último pacote chegou.
+O Mac não compila no Windows, então o script pede ao GitHub só esse pacote
+(`.github/workflows/release.yml`). O job do Mac junta o pacote dele na mesma release,
+acrescenta as entradas dele no `latest.json` e só então tira a release do rascunho. Esse
+job roda na `main`, e não na tag, porque o GitHub só deixa uma execução ler o cache da
+própria ref ou da `main`: na tag, cada release compilava o Rust do zero.
+
+O rascunho existe de propósito. Enquanto o Mac compila, o `latest.json` ainda não tem o
+pacote dele, e um app que perguntasse nessa janela receberia a oferta de uma versão que
+não tem como baixar. A release só fica visível quando o último pacote chegou.
+
+Variações: `npm run release -- --only android` solta só um APK novo (sem tag nem
+desktop); `--only desktop` pula o celular.
+
+O script precisa da chave do atualizador em `~/.tauri` (`markdown-viewer.key` e
+`markdown-viewer.key.password`), do `apps/desktop/.env.local` com os servidores de
+produção e da keystore do Android em `apps/mobile/android/local.properties`.
+
+Linux e Mac Intel saíram da lista na 0.14: nenhum aparelho usa.
+
+## Testar no celular sem lançar
+
+Com o celular conectado (cabo, ou depuração sem fio: Opções do desenvolvedor >
+Depuração sem fio > Parear com código, depois `adb pair IP:PORTA` e `adb connect IP:PORTA`):
+
+```bash
+npm run phone
+```
+
+Compila o APK de release aqui e instala por cima do app, mantendo o vault. Ele usa a
+mesma chave e a mesma conta do número do build (minutos desde 2026) que as releases, então a
+próxima release continua chegando como atualização.
 
 ## Quando dá errado
 
@@ -114,11 +140,13 @@ pelo GitHub Releases", no vault, com três diferenças:
   asset `markdown-viewer-<run>.apk`, e nunca é marcada como latest: o atualizador do
   desktop lê `releases/latest`. O passo que publica o desktop marca a dele como latest de
   propósito.
-- **Sai pela tag, não a cada push.** Para soltar um APK sem versão nova, há o botão Run
-  workflow em Actions > Release Android.
+- **Sai com a versão, não a cada push.** Para soltar um APK sem versão nova:
+  `npm run release -- --only android`, ou o botão Run workflow em Actions > Release
+  Android quando este computador não estiver à mão.
 
-O `versionCode` é o número da execução do workflow, então cresce sozinho e nunca repete.
-A tag tem que bater com `version` em `apps/mobile/app.json`, além do `tauri.conf.json`.
+O `versionCode` são os minutos desde 1/1/2026, a mesma conta no script e no workflow:
+cresce sozinho, quem quer que compile. A versão em `apps/mobile/app.json` tem que bater
+com a do `tauri.conf.json`.
 
 **Assinatura.** A keystore é a compartilhada por todos os apps Android do Matheus
 (`~/.android/daily-motion-release.jks`, alias `dailymotion`), nos secrets `KEYSTORE_B64` e

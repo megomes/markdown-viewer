@@ -1,55 +1,51 @@
-name: Release
+name: Release macOS
+
+# The Mac's part of a release. The rest is built on Matheus's computer by
+# `npm run release` (scripts/release.mjs, docs/releases.md), which publishes the
+# Windows installers and the APK, leaves the desktop release as a draft and
+# starts this:
+#
+#   gh workflow run release.yml --ref main -f tag=v0.X.Y
+#
+# This adds the Mac bundle to that draft, merges its entries into the
+# `latest.json` already there, and only then takes the release out of draft.
+#
+# It runs on main, not on the tag, for the cache: GitHub only lets a run read
+# caches saved on its own ref or on the default branch, so a run on a tag
+# compiled Rust from nothing every time.
 
 on:
-  push:
-    tags:
-      - 'v*'
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: 'A tag da release em rascunho (v0.X.Y)'
+        required: true
+
+concurrency:
+  group: release
+  cancel-in-progress: false
 
 jobs:
-  # The updater compares the version in `tauri.conf.json` against the one the
-  # running app was built with. A tag that disagrees with the config produces a
-  # release nobody is ever offered, and nothing anywhere reports an error, so
-  # the disagreement is caught here instead of in the wild.
-  check-version:
-    name: Confere se a tag bate com a versão
-    runs-on: ubuntu-latest
+  mac:
+    name: Empacota para macOS
+    runs-on: macos-latest
+    permissions:
+      contents: write
     steps:
       - uses: actions/checkout@v4
-      - name: Compara a tag com o tauri.conf.json
+        with:
+          ref: ${{ inputs.tag }}
+
+      - name: Confere a tag
+        env:
+          TAG: ${{ inputs.tag }}
         run: |
           set -euo pipefail
           config=$(node -p "require('./apps/desktop/src-tauri/tauri.conf.json').version")
-          tag="${GITHUB_REF_NAME#v}"
-          if [ "$config" != "$tag" ]; then
-            echo "::error::A tag diz $tag e o tauri.conf.json diz $config. Elas têm que bater."
+          if [ "$TAG" != "v$config" ]; then
+            echo "::error::A tag diz $TAG e o tauri.conf.json diz $config. Elas têm que bater."
             exit 1
           fi
-          echo "Ambos em $config."
-
-  bundle:
-    name: Empacota para ${{ matrix.label }}
-    needs: check-version
-    permissions:
-      contents: write
-    strategy:
-      fail-fast: false
-      matrix:
-        include:
-          - platform: macos-latest
-            label: macOS (Apple Silicon)
-            args: '--target aarch64-apple-darwin'
-          - platform: macos-latest
-            label: macOS (Intel)
-            args: '--target x86_64-apple-darwin'
-          - platform: ubuntu-22.04
-            label: Linux
-            args: ''
-          - platform: windows-latest
-            label: Windows
-            args: ''
-    runs-on: ${{ matrix.platform }}
-    steps:
-      - uses: actions/checkout@v4
 
       - uses: actions/setup-node@v4
         with:
@@ -59,25 +55,15 @@ jobs:
 
       - uses: dtolnay/rust-toolchain@stable
         with:
-          targets: ${{ startsWith(matrix.platform, 'macos') && 'aarch64-apple-darwin,x86_64-apple-darwin' || '' }}
+          targets: aarch64-apple-darwin
 
+      # Saved under main (see the top), so each release starts from the one
+      # before. The key leaves out the Cargo.lock change every version bump
+      # makes, which would otherwise miss each time.
       - uses: swatinem/rust-cache@v2
         with:
           workspaces: apps/desktop/src-tauri
-
-      # WebKitGTK and the AppImage packer only exist on the Linux runner. The
-      # indicator is what draws the icon beside the clock there, and without it
-      # an app closed to the tray would be an app with no way back.
-      #
-      # Ayatana's and Canonical's are the same library twice, and the two
-      # packages declare each other a conflict: asking for both is a build that
-      # stops at apt. It is Ayatana's that Tauri looks for at run time.
-      - name: Instala as dependências de sistema do Linux
-        if: matrix.platform == 'ubuntu-22.04'
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y libwebkit2gtk-4.1-dev libayatana-appindicator3-dev \
-            librsvg2-dev patchelf
+          shared-key: release
 
       - run: npm ci
 
@@ -93,9 +79,10 @@ jobs:
       # Developer ID in the secrets, tauri-action signs and notarises instead,
       # and this step has nothing left to repair.
       - name: Assina o bundle do macOS
-        if: startsWith(matrix.platform, 'macos')
         run: echo "APPLE_SIGNING_IDENTITY=-" >> "$GITHUB_ENV"
 
+      # Finds the draft by its tag, uploads into it, and merges its platforms
+      # into the latest.json the Windows side left there.
       - uses: tauri-apps/tauri-action@v0
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -109,32 +96,21 @@ jobs:
           VITE_FEEDBACK_KIT_URL: ${{ secrets.FEEDBACK_KIT_URL }}
         with:
           projectPath: apps/desktop
-          tagName: ${{ github.ref_name }}
+          tagName: ${{ inputs.tag }}
           releaseName: Markdown Viewer __VERSION__
           releaseBody: Baixe abaixo o pacote do seu sistema.
-          # Kept a draft until every platform has uploaded. A release that is
-          # already public carries a `latest.json` naming platforms whose files
-          # are still being built, and an app that asks in that window is
-          # offered an update it cannot download.
           releaseDraft: true
           prerelease: false
           includeUpdaterJson: true
-          args: ${{ matrix.args }}
+          args: '--target aarch64-apple-darwin'
 
-  publish:
-    name: Publica a release
-    needs: bundle
-    runs-on: ubuntu-latest
-    permissions:
-      contents: write
-    steps:
-      - uses: actions/checkout@v4
+      # Only now does `releases/latest/download/latest.json` start answering,
+      # and by now every file it names is in place.
+      #
+      # Marked latest by name: the phone's releases live in the same
+      # repository and must never take that place.
       - name: Tira a release do rascunho
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        # Only now does `releases/latest/download/latest.json` start answering,
-        # and by now every file it names is in place.
-        #
-        # Marked latest by name: the phone's releases (android-release.yml) live
-        # in the same repository and must never take that place.
-        run: gh release edit "$GITHUB_REF_NAME" --draft=false --latest --repo "$GITHUB_REPOSITORY"
+          TAG: ${{ inputs.tag }}
+        run: gh release edit "$TAG" --draft=false --latest --repo "$GITHUB_REPOSITORY"

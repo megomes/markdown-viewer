@@ -4,29 +4,25 @@ name: Release Android
 # apps, published as a release the app finds and installs by itself (the OTA
 # runbook in the vault: "Update OTA de app Android pelo GitHub Releases").
 #
-# It goes out with the same version tag as the desktop (docs/releases.md), not
-# on every push: pushes here are frequent, and each would become an install.
+# The APK of each version is built on Matheus's computer by `npm run release`
+# (scripts/release.mjs), in seconds instead of a quarter of an hour. This is the
+# fallback for when that computer is not at hand: Actions > Release Android >
+# Run workflow puts out an APK of main.
 
 on:
-  push:
-    tags:
-      - 'v*'
   workflow_dispatch:
-
-# Two runs at once could publish out of order, and the app would be offered
-# the older build last.
-concurrency:
-  group: android-release
-  cancel-in-progress: false
 
 jobs:
   apk:
     name: APK assinado
     runs-on: ubuntu-latest
+    # Two at once could publish out of order, and the app would be offered the
+    # older build last.
+    concurrency:
+      group: android-release
+      cancel-in-progress: false
     permissions:
       contents: write
-    env:
-      VERSION_CODE: ${{ github.run_number }}
     steps:
       - uses: actions/checkout@v4
 
@@ -42,16 +38,12 @@ jobs:
             exit 1
           fi
 
-      - name: Confere se a tag bate com a versão do app
-        if: startsWith(github.ref, 'refs/tags/v')
-        run: |
-          set -euo pipefail
-          app=$(node -p "require('./apps/mobile/app.json').expo.version")
-          tag="${GITHUB_REF_NAME#v}"
-          if [ "$app" != "$tag" ]; then
-            echo "::error::A tag diz $tag e o apps/mobile/app.json diz $app. Elas têm que bater."
-            exit 1
-          fi
+      # The build number (versionCode) is the minutes since 2026, the same
+      # count `npm run phone` and `npm run release` use: it only grows, whoever
+      # builds, so an APK from either side installs over the other and the
+      # update check sees the newest as newest.
+      - name: Número do build
+        run: echo "VERSION_CODE=$(( ($(date +%s) - 1767225600) / 60 ))" >> "$GITHUB_ENV"
 
       - uses: actions/setup-node@v4
         with:
@@ -62,6 +54,10 @@ jobs:
         with:
           distribution: temurin
           java-version: 17
+
+      # Gradle's downloads and its build cache, saved from main only, so each
+      # release starts from the one before.
+      - uses: gradle/actions/setup-gradle@v4
 
       - run: npm ci
 
@@ -81,7 +77,7 @@ jobs:
         env:
           KEYSTORE_PATH: ${{ runner.temp }}/release.jks
           KEYSTORE_PASSWORD: ${{ secrets.KEYSTORE_PASSWORD }}
-        run: ./gradlew assembleRelease -PreactNativeArchitectures=arm64-v8a --no-daemon
+        run: ./gradlew assembleRelease -PreactNativeArchitectures=arm64-v8a --build-cache
 
       - name: Publica a release
         env:
