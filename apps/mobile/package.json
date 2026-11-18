@@ -1,6 +1,6 @@
 {
   "name": "@markdown-viewer/mobile",
-  "version": "0.16.0",
+  "version": "0.16.1",
   "main": "index.ts",
   "dependencies": {
     "@codemirror/state": "^6.7.5",
