@@ -19,7 +19,7 @@ import {
   watch,
   writeFile,
   writeTextFile,
-} from '@tauri-apps/plugin-fs'
+} from './fs-plugin'
 import {
   baseName,
   nativeBaseName,

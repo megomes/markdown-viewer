@@ -48,38 +48,111 @@ fn paths_from_arguments() -> Vec<String> {
         .collect()
 }
 
+/// The folders opened with `allow_base`: a path is only ever let in by
+/// `allow_inside` when it lies in one of them.
+#[derive(Default)]
+struct Bases(Mutex<Vec<std::path::PathBuf>>);
+
 /// Opens the scope of the filesystem plugin to a folder the person just picked
 /// in the system dialog. Nothing outside a folder they chose is reachable.
 #[tauri::command]
-fn allow_base(app: tauri::AppHandle, path: String) -> Result<(), String> {
+fn allow_base(
+    app: tauri::AppHandle,
+    bases: tauri::State<Bases>,
+    path: String,
+) -> Result<(), String> {
     let scope = app.fs_scope();
     scope
         .allow_directory(&path, true)
         .map_err(|error| error.to_string())?;
-    // On macOS and Linux the scope's `**` does not reach a name that starts
-    // with a dot, and the vault keeps the app's state in `.markdown-viewer`
-    // ("forbidden path" on the Mac, never on Windows). Those names are allowed
-    // one by one: the app's own folder, whether it exists yet or not, and every
-    // dot file or folder already at the top of the vault.
-    let base = std::path::Path::new(&path);
-    scope
-        .allow_directory(base.join(".markdown-viewer"), true)
-        .map_err(|error| error.to_string())?;
-    if let Ok(entries) = std::fs::read_dir(base) {
-        for entry in entries.flatten() {
-            if !entry.file_name().to_string_lossy().starts_with('.') {
-                continue;
-            }
-            let item = entry.path();
-            let allowed = if item.is_dir() {
-                scope.allow_directory(&item, true)
-            } else {
-                scope.allow_file(&item)
-            };
-            allowed.map_err(|error| error.to_string())?;
+    if let Ok(mut known) = bases.0.lock() {
+        let base = std::path::PathBuf::from(&path);
+        if !known.contains(&base) {
+            known.push(base);
         }
     }
+    // On macOS and Linux the scope's `**` does not reach a name that starts
+    // with a dot ("forbidden path" on the Mac, never on Windows), and the vault
+    // keeps the app's state in `.markdown-viewer`. That folder is let in here,
+    // whether it exists yet or not; any other dot name, at any depth, by
+    // `allow_inside` the first time it is refused.
+    scope
+        .allow_directory(std::path::Path::new(&path).join(".markdown-viewer"), true)
+        .map_err(|error| error.to_string())
+}
+
+/// Every prefix of `path` whose last name starts with a dot, below `base`.
+/// None when `path` is not inside `base`, or climbs out of it with `..`.
+fn dot_prefixes(base: &std::path::Path, path: &std::path::Path) -> Option<Vec<std::path::PathBuf>> {
+    use std::path::Component;
+    let rest = path.strip_prefix(base).ok()?;
+    let mut at = base.to_path_buf();
+    let mut out = Vec::new();
+    for component in rest.components() {
+        match component {
+            Component::Normal(name) => {
+                at.push(name);
+                if name.to_string_lossy().starts_with('.') {
+                    out.push(at.clone());
+                }
+            }
+            Component::CurDir => {}
+            _ => return None,
+        }
+    }
+    Some(out)
+}
+
+/// Lets in a path inside an opened folder that the scope refused because a
+/// name in it starts with a dot (`Notas/.claude/skills/x.md`). Each such name
+/// is let in with everything under it.
+#[tauri::command]
+fn allow_inside(
+    app: tauri::AppHandle,
+    bases: tauri::State<Bases>,
+    path: String,
+) -> Result<(), String> {
+    let wanted = std::path::Path::new(&path);
+    let known = bases.0.lock().map_err(|error| error.to_string())?;
+    let prefixes = known
+        .iter()
+        .find_map(|base| dot_prefixes(base, wanted))
+        .ok_or_else(|| format!("Fora das pastas abertas: {path}"))?;
+    let scope = app.fs_scope();
+    for prefix in prefixes {
+        scope
+            .allow_directory(&prefix, true)
+            .map_err(|error| error.to_string())?;
+    }
     Ok(())
+}
+
+#[cfg(test)]
+mod dot_tests {
+    use super::dot_prefixes;
+    use std::path::{Path, PathBuf};
+
+    #[test]
+    fn finds_every_dot_name_below_the_base() {
+        let base = Path::new("/v");
+        assert_eq!(
+            dot_prefixes(base, Path::new("/v/Notas/.claude/skills/.x/a.md")).unwrap(),
+            vec![
+                PathBuf::from("/v/Notas/.claude"),
+                PathBuf::from("/v/Notas/.claude/skills/.x")
+            ]
+        );
+        assert!(dot_prefixes(base, Path::new("/v/Notas/a.md"))
+            .unwrap()
+            .is_empty());
+    }
+
+    #[test]
+    fn refuses_paths_outside_or_climbing_out() {
+        let base = Path::new("/v");
+        assert!(dot_prefixes(base, Path::new("/outro/.x")).is_none());
+        assert!(dot_prefixes(base, Path::new("/v/../.ssh")).is_none());
+    }
 }
 
 const KEYCHAIN_SERVICE: &str = "markdown-viewer";
@@ -118,7 +191,11 @@ fn secret_delete(name: String) -> Result<(), String> {
 /// filesystem plugin, so the engine can read and write it.
 #[tauri::command]
 fn sync_state_dir(app: tauri::AppHandle, vault: String) -> Result<String, String> {
-    if vault.is_empty() || !vault.chars().all(|c| c.is_ascii_alphanumeric() || c == '-' || c == '_') {
+    if vault.is_empty()
+        || !vault
+            .chars()
+            .all(|c| c.is_ascii_alphanumeric() || c == '-' || c == '_')
+    {
         return Err(format!("nome de vault inválido: {vault}"));
     }
     let dir = app
@@ -169,12 +246,19 @@ fn scan(base: &std::path::Path, skip: &[String]) -> Vec<ScannedFile> {
     let mut out = Vec::new();
     let mut pending = vec![base.to_path_buf()];
     while let Some(dir) = pending.pop() {
-        let Ok(entries) = std::fs::read_dir(&dir) else { continue };
+        let Ok(entries) = std::fs::read_dir(&dir) else {
+            continue;
+        };
         for entry in entries.flatten() {
-            let Ok(kind) = entry.file_type() else { continue };
+            let Ok(kind) = entry.file_type() else {
+                continue;
+            };
             let path = entry.path();
             if kind.is_dir() {
-                if !skip.iter().any(|name| entry.file_name().to_string_lossy() == *name) {
+                if !skip
+                    .iter()
+                    .any(|name| entry.file_name().to_string_lossy() == *name)
+                {
                     pending.push(path);
                 }
             } else if kind.is_file() {
@@ -185,13 +269,19 @@ fn scan(base: &std::path::Path, skip: &[String]) -> Vec<ScannedFile> {
                     .and_then(|t| t.duration_since(std::time::UNIX_EPOCH).ok())
                     .map(|d| d.as_millis() as u64)
                     .unwrap_or(0);
-                let Ok(relative) = path.strip_prefix(base) else { continue };
+                let Ok(relative) = path.strip_prefix(base) else {
+                    continue;
+                };
                 let path = relative
                     .components()
                     .map(|c| c.as_os_str().to_string_lossy().into_owned())
                     .collect::<Vec<_>>()
                     .join("/");
-                out.push(ScannedFile { path, size: meta.len(), mtime });
+                out.push(ScannedFile {
+                    path,
+                    size: meta.len(),
+                    mtime,
+                });
             }
         }
     }
@@ -354,11 +444,13 @@ pub fn run() {
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_process::init())
         .manage(Opened::default())
+        .manage(Bases::default())
         .manage(panels::Scale::default())
         .manage(pointer::Watch::default())
         .on_menu_event(|app, event| chipmenu::on_chosen(app, event.id().as_ref()))
         .invoke_handler(tauri::generate_handler![
             allow_base,
+            allow_inside,
             move_to_trash,
             secret_set,
             sync_state_dir,

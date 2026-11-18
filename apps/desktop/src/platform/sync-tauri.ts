@@ -8,7 +8,7 @@
 
 import { invoke } from '@tauri-apps/api/core'
 import { join } from '@tauri-apps/api/path'
-import { mkdir, readFile, remove, rename, stat, writeFile } from '@tauri-apps/plugin-fs'
+import { mkdir, readFile, remove, rename, stat, writeFile } from './fs-plugin'
 import type { LocalFiles, LocalStat, StateStore, SyncState } from '@markdown-viewer/sync/engine'
 import { IGNORE_FILE, ignoreMatcher } from '@markdown-viewer/sync/ignore'
 
