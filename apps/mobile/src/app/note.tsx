@@ -1,9 +1,10 @@
 /**
  * One file of the vault. Notes open in the desktop's editor, for reading; the
  * "Editar" button turns it into the same live preview the desktop writes in,
- * and what is typed is saved by itself. Images open as images. HTML, PDF, Bases
- * and code get their viewers in the next deliveries of stage 8, and say so
- * instead of showing nothing.
+ * and what is typed is saved by itself. Images open as images, and HTML pages
+ * live, for reading, as on a phone or laid out as on a computer. PDF, Bases and
+ * code get their viewers in the next deliveries of stage 8, and say so instead
+ * of showing nothing.
  *
  * The screen holds the file's id, not its path. Renaming or moving the note,
  * here or on another device, changes its title and nothing else: the editor,
@@ -29,6 +30,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import { isTextFile, viewerOf } from '@markdown-viewer/core/fs'
 import NoteEditor, { type EditorCommand } from '../dom/NoteEditor'
 import { MarkdownBar } from '../ui/MarkdownBar'
+import { HtmlPage } from '../ui/HtmlPage'
 import { bytesToBase64 } from '../vault/base64'
 import { PhoneFiles } from '../vault/storage'
 import {
@@ -45,12 +47,13 @@ import {
   useVault,
 } from '../vault/runtime'
 import { colors, radius } from '../ui/theme'
-import { Check, Pencil, Pin, PinOff } from 'lucide-react-native'
+import { Check, Monitor, Pencil, Pin, PinOff, Smartphone } from 'lucide-react-native'
 
 const files = new PhoneFiles()
+/** "Modo computador" for HTML pages, kept while the app is open. */
+let desktopLayout = false
 
 const LATER: Record<string, string> = {
-  html: 'HTML',
   pdf: 'PDF',
   base: 'Bases',
   code: 'código',
@@ -243,6 +246,30 @@ export default function Note() {
     setEditing((on) => !on)
     setNaming(false)
   }, [])
+  const [desktop, setDesktop] = useState(desktopLayout)
+  const toggleDesktop = useCallback(() => {
+    setDesktop((on) => {
+      desktopLayout = !on
+      return !on
+    })
+  }, [])
+  const htmlRight = useCallback(
+    () => (
+      <Pressable
+        onPress={toggleDesktop}
+        hitSlop={12}
+        accessibilityRole="button"
+        accessibilityLabel={desktop ? 'Ver como no celular' : 'Ver como no computador'}
+      >
+        {desktop ? (
+          <Smartphone size={21} color={colors.accentText} strokeWidth={1.75} />
+        ) : (
+          <Monitor size={21} color={colors.textSecondary} strokeWidth={1.75} />
+        )}
+      </Pressable>
+    ),
+    [desktop, toggleDesktop],
+  )
   const pinned = vault.pins.includes(id)
   const headerRight = useCallback(
     () => (
@@ -278,7 +305,13 @@ export default function Note() {
 
   return (
     <View style={[styles.screen, { paddingBottom: keyboard > 0 ? keyboard : insets.bottom }]}>
-      <Stack.Screen options={{ title, headerRight: isNote && file ? headerRight : undefined }} />
+      <Stack.Screen
+        options={{
+          title,
+          headerRight:
+            isNote && file ? headerRight : viewer === 'html' && file ? htmlRight : undefined,
+        }}
+      />
       {saveError ? <Text style={styles.saveError}>Não deu para salvar: {saveError}</Text> : null}
       {vault.phase === 'loading' ? (
         <ActivityIndicator style={styles.loading} color={colors.textSecondary} />
@@ -312,6 +345,8 @@ export default function Note() {
             dom={{ style: { flex: 1, backgroundColor: colors.bgApp } }}
           />
         )
+      ) : viewer === 'html' && path && hash ? (
+        <HtmlPage path={path} hash={hash} desktop={desktop} />
       ) : viewer === 'image' ? (
         imageUri ? (
           <ScrollView maximumZoomScale={4} contentContainerStyle={styles.imageBox}>

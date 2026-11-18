@@ -431,7 +431,12 @@ Celular e tablet. Nasceu só de leitura; desde 2026-11-15 também edita e cria n
   sumário da nota.
 - Leitura de Markdown com a mesma renderização do desktop.
 - HTML com estado sincronizado, PDF baixado sob demanda, Bases, imagens, código.
-- Comentários, com o Revisor no toque.
+- **HTML no celular é só para ver** (2026-11-17): a página roda com seus scripts, CSS e
+  imagens da pasta, começa do `localStorage` que o desktop salvou e não grava nada de
+  volta. Um botão no topo alterna entre a página como no celular e o **modo computador**,
+  que monta a página com 1280 px de largura e encolhe para caber. Sem Revisor no celular,
+  por decisão do Matheus.
+- Comentários, com o Revisor no toque (fica para depois; o HTML no celular não tem).
 - Feedback do app (seção 6.9).
 - Funciona offline com o que já foi baixado.
 - No tablet, árvore e nota lado a lado.
