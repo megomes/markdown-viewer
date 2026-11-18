@@ -124,6 +124,8 @@ export interface TransferProgress {
   bytesTotal: number
   /** The file being worked on. */
   path: string
+  /** What the bar says instead of "Baixando" or "Enviando". */
+  label?: string
 }
 
 export interface EngineOptions {
@@ -499,29 +501,45 @@ export class SyncEngine {
       if (group) group.push([id, record])
       else byPath.set(record.path, [[id, record]])
     }
-    let removed = 0
+    const copies: [string, FileRecord][] = []
     for (const group of byPath.values()) {
       if (group.length < 2) continue
       const hash = group[0]![1].hash
       if (!hash || group.some(([, record]) => record.hash !== hash)) continue
       group.sort(([, a], [, b]) => a.seq - b.seq)
-      for (const [id, record] of group.slice(1)) {
-        const result = await this.options.remote.commit({
-          fileId: id,
-          parent: record.seq,
-          meta: null,
-          deleted: true,
-        })
-        if (!result.ok) {
-          report.again = true
-          return
-        }
-        delete state.files[id]
-        await this.options.store.setBase(id, null)
-        await this.saveState()
-        removed++
-      }
+      copies.push(...group.slice(1))
     }
+    // A thousand copies one round trip at a time took minutes with nothing on
+    // the screen: they go several at once, and the bar says what is going on.
+    let removed = 0
+    let refused = false
+    await inParallel(copies, DELETES_AT_ONCE, async ([id, record]) => {
+      if (refused) return
+      const result = await this.options.remote.commit({
+        fileId: id,
+        parent: record.seq,
+        meta: null,
+        deleted: true,
+      })
+      if (!result.ok) {
+        refused = true
+        report.again = true
+        return
+      }
+      delete state.files[id]
+      await this.options.store.setBase(id, null)
+      await this.saveState()
+      removed++
+      this.options.onProgress?.({
+        direction: 'upload',
+        label: 'Limpando cópias',
+        done: removed,
+        total: copies.length,
+        bytesDone: 0,
+        bytesTotal: 0,
+        path: record.path,
+      })
+    })
     // Counted as sent: a pass that did something is followed by another.
     report.pushed += removed
   }
@@ -687,6 +705,8 @@ function sharesPath(state: SyncState, id: string, path: string): boolean {
 
 /** Past this many known files, a folder that lists empty stops the pass. */
 const EMPTY_GUARD = 10
+/** Repeated copies deleted at once: each is a single small request. */
+const DELETES_AT_ONCE = 8
 /** New files sent at once on a push. */
 const FILES_AT_ONCE = 4
 /** Chunks of one file sent at once. */

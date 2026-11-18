@@ -339,6 +339,10 @@ export class VaultMirror {
     for (const entry of entries) latest.set(entry.fileId, entry)
 
     let done = 0
+    // The state of a big vault is a megabyte of JSON. Written after every
+    // entry, a thousand deletions kept the phone busy for minutes; once a
+    // second is enough, since an entry applied twice after a crash lands the same.
+    let saved = Date.now()
     for (const entry of latest.values()) {
       done++
       await this.exclusive(async () => {
@@ -348,7 +352,9 @@ export class VaultMirror {
         this.options.onProgress?.({ direction: 'download', done, total: latest.size, path })
         report.changed++
         report.paths.push(path)
+        if (Date.now() - saved < 1000) return
         await this.saveState()
+        saved = Date.now()
       })
     }
     if (entries.length) state.cursor = Math.max(state.cursor, entries[entries.length - 1]!.seq)

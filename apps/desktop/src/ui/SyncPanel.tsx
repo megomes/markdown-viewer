@@ -554,7 +554,9 @@ function Configured({ activePath }: { activePath: { baseId: string; path: string
     <div className="sync-body">
       <p className={'sync-status is-' + sync.status}>{label}</p>
       {sync.download && <TransferBar label="Baixando" progress={sync.download} />}
-      {sync.upload && <TransferBar label="Enviando" progress={sync.upload} />}
+      {sync.upload && (
+        <TransferBar label={sync.upload.label ?? 'Enviando'} progress={sync.upload} />
+      )}
       <p className="sync-note">
         Vault <b>{config.vault}</b>, pasta {config.folder}, aparelho {config.deviceName}.
       </p>
