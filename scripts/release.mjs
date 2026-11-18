@@ -1,20 +1,26 @@
 /**
  * `npm run release`: puts out the version in the code, built on this computer.
  *
- * The Windows installers and the phone's APK are compiled here, where the
- * caches are warm (a minute or two, against a quarter of an hour on GitHub's
- * machines). Only the Mac bundle goes to GitHub, since Windows cannot build
- * one: release.yml adds it to the same release and takes the release out of
- * draft. Until then the desktop update stays hidden, so no app is offered a
- * `latest.json` naming a file that does not exist yet. The phone's release is
- * public at once.
+ * Everything is compiled on Matheus's own machines, never on GitHub's: the
+ * Windows installers and the phone's APK here, the Mac bundle on his Mac over
+ * SSH (scripts/mac-build.mjs). GitHub only keeps the files of the release,
+ * which is where the apps look for updates.
+ *
+ * When the Mac is not on the network, the version goes out for Windows and
+ * Android, the Mac's update simply is not offered yet, and `--only mac` adds
+ * it to the same release later.
+ *
+ * Everything is compiled before anything is published: a failure leaves no
+ * half release.
  *
  * Needs, on this computer: the updater key in ~/.tauri (docs/releases.md), the
- * Android keystore in apps/mobile/android/local.properties, and `gh` logged in.
+ * Android keystore in apps/mobile/android/local.properties, `gh` logged in, and
+ * for the Mac, the `mac` host in ~/.ssh/config.
  *
  *   npm run release              everything
  *   npm run release -- --only android
- *   npm run release -- --only desktop
+ *   npm run release -- --only desktop   Windows, and the Mac if it answers
+ *   npm run release -- --only mac       the Mac, into a version already out
  */
 
 import { execFileSync, spawnSync } from 'node:child_process'
@@ -29,6 +35,7 @@ import {
 import { homedir, tmpdir } from 'node:os'
 import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
+import { buildOnMac, macEntries, macHost, macReachable } from './mac-build.mjs'
 
 const root = join(dirname(fileURLToPath(import.meta.url)), '..')
 const desktop = join(root, 'apps', 'desktop')
@@ -40,8 +47,9 @@ const REPO = 'megomes/markdown-viewer'
 const only = process.argv.includes('--only')
   ? process.argv[process.argv.indexOf('--only') + 1]
   : null
-const doDesktop = only !== 'android'
-const doAndroid = only !== 'desktop'
+const doMacOnly = only === 'mac'
+const doDesktop = only === null || only === 'desktop'
+const doAndroid = only === null || only === 'android'
 
 function fail(message) {
   console.error('\n' + message)
@@ -86,7 +94,11 @@ if (out('git', ['rev-list', '--count', 'HEAD..origin/main']) !== '0')
   fail('A main do GitHub tem commits que não estão aqui.')
 const tagged = out('git', ['tag', '--list', tag])
 if (doDesktop && tagged) fail(`A ${tag} já saiu. Suba a versão antes de lançar.`)
-const sha = out('git', ['rev-parse', 'HEAD'])
+if (doMacOnly && !tagged) fail(`A ${tag} ainda não saiu: o Mac entra numa versão já lançada.`)
+// The Mac of a version already out is built from that version, not from HEAD.
+const sha = doMacOnly
+  ? out('git', ['rev-parse', `${tag}^{commit}`])
+  : out('git', ['rev-parse', 'HEAD'])
 const subject = out('git', ['log', '-1', '--format=%s'])
 console.log(`Versão ${version}, commit ${sha.slice(0, 7)}: ${subject}`)
 
@@ -94,7 +106,49 @@ console.log(`Versão ${version}, commit ${sha.slice(0, 7)}: ${subject}`)
 // and android-release.yml use too, so it only grows, whoever builds.
 const code = String(Math.floor((Date.now() / 1000 - 1767225600) / 60))
 
-// ---- Compile both before publishing anything: a failure leaves no half release.
+// ---- Only the Mac, into a version that is already out.
+
+if (doMacOnly) {
+  if (!macReachable())
+    fail(`O Mac (${macHost()}) não respondeu por SSH. Tente quando ele estiver na rede.`)
+  const mac = buildOnMac({ root, sha, version })
+  step('Juntando o Mac à release')
+  const dir = join(tmpdir(), `markdown-viewer-${version}-latest`)
+  mkdirSync(dir, { recursive: true })
+  run('gh', [
+    'release',
+    'download',
+    tag,
+    '--repo',
+    REPO,
+    '--pattern',
+    'latest.json',
+    '--dir',
+    dir,
+    '--clobber',
+  ])
+  const latestFile = join(dir, 'latest.json')
+  const data = JSON.parse(readFileSync(latestFile, 'utf8'))
+  data.platforms = { ...data.platforms, ...macEntries({ repo: REPO, tag, tar: mac.tar }) }
+  writeFileSync(latestFile, JSON.stringify(data, null, 2))
+  run('gh', [
+    'release',
+    'upload',
+    tag,
+    mac.dmg,
+    mac.tar,
+    mac.sig,
+    latestFile,
+    '--repo',
+    REPO,
+    '--clobber',
+  ])
+  run('gh', ['release', 'edit', tag, '--repo', REPO, '--draft=false', '--latest'])
+  console.log(`\nPronto: o Mac está na ${tag}.`)
+  process.exit(0)
+}
+
+// ---- Compile everything before publishing anything: a failure leaves no half release.
 
 let apk = null
 if (doAndroid) {
@@ -136,6 +190,7 @@ if (doAndroid) {
 }
 
 const windowsFiles = []
+const macFiles = []
 let latest = null
 if (doDesktop) {
   if (!windows)
@@ -165,6 +220,17 @@ if (doDesktop) {
   const msi = find('msi', '.msi')
   windowsFiles.push(nsis, nsis + '.sig', msi, msi + '.sig')
 
+  // The Mac, when it is on the network. Not there, the version goes out without
+  // it, and `--only mac` adds it later.
+  let macPlatforms = {}
+  if (macReachable()) {
+    const mac = buildOnMac({ root, sha, version })
+    macFiles.push(mac.dmg, mac.tar, mac.sig)
+    macPlatforms = macEntries({ repo: REPO, tag, tar: mac.tar })
+  } else {
+    console.log(`\nO Mac (${macHost()}) não respondeu por SSH: esta versão sai sem ele.`)
+  }
+
   // The same entries tauri-action writes; the Mac job adds its own to this file.
   const entry = (file) => ({
     signature: readFileSync(file + '.sig', 'utf8').trim(),
@@ -184,6 +250,7 @@ if (doDesktop) {
           'windows-x86_64': entry(msi),
           'windows-x86_64-msi': entry(msi),
           'windows-x86_64-nsis': entry(nsis),
+          ...macPlatforms,
         },
       },
       null,
@@ -215,7 +282,7 @@ if (doAndroid) {
 }
 
 if (doDesktop) {
-  step(`Marcando a ${tag} e subindo o Windows`)
+  step(`Marcando a ${tag} e publicando o desktop`)
   run('git', ['tag', tag, sha])
   run('git', ['push', 'origin', tag])
   run('gh', [
@@ -223,21 +290,21 @@ if (doDesktop) {
     'create',
     tag,
     ...windowsFiles,
+    ...macFiles,
     latest,
     '--repo',
     REPO,
     '--verify-tag',
-    '--draft',
+    '--latest',
     '--title',
     `Markdown Viewer ${version}`,
     '--notes',
     'Baixe abaixo o pacote do seu sistema.',
   ])
-  step('Pedindo o pacote do Mac ao GitHub')
-  run('gh', ['workflow', 'run', 'release.yml', '--repo', REPO, '--ref', 'main', '-f', `tag=${tag}`])
   console.log(
-    `\nO APK já está no ar. O desktop sai do rascunho quando o Mac terminar:\n` +
-      `  gh run watch --repo ${REPO} $(gh run list --repo ${REPO} --workflow release.yml -L 1 --json databaseId -q ".[0].databaseId")`,
+    macFiles.length
+      ? `\nPronto: a ${tag} está no ar, com Windows e Mac.`
+      : `\nPronto: a ${tag} está no ar, sem o Mac. Com o Mac na rede:\n  npm run release -- --only mac`,
   )
 } else if (doAndroid) {
   console.log('\nPronto: o APK está no ar.')

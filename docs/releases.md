@@ -14,8 +14,8 @@ Cada pacote vai assinado. O app carrega a chave pública e recusa qualquer
 pacote assinado com outra chave, e é isso que impede que alguém no meio do
 caminho troque o instalador.
 
-A chave privada existe em dois lugares, o seu computador e os secrets do
-repositório. Nunca no código.
+A chave privada existe em dois lugares, o Windows e o Mac do Matheus, os dois em
+`~/.tauri`. Nunca no código, nunca no GitHub.
 
 ## Preparo, uma vez só
 
@@ -40,14 +40,10 @@ de lá baixando o instalador na mão.
 Cole o conteúdo de `~/.tauri/markdown-viewer.key.pub` no campo `pubkey` de
 `apps/desktop/src-tauri/tauri.conf.json`, dentro de `plugins.updater`.
 
-### 3. Dar a chave privada ao CI
+### 3. Levar a chave ao Mac
 
-```bash
-gh secret set TAURI_SIGNING_PRIVATE_KEY < ~/.tauri/markdown-viewer.key
-gh secret set TAURI_SIGNING_PRIVATE_KEY_PASSWORD
-```
-
-O `gh` pergunta a senha na segunda linha e não a mostra na tela.
+A mesma chave (`markdown-viewer.key`, `.key.pub` e `.key.password`) vai para
+`~/.tauri` no Mac. Com outra chave, o Mac publica pacotes que o app recusa.
 
 ## Publicar uma versão
 
@@ -59,20 +55,29 @@ O `gh` pergunta a senha na segunda linha e não a mostra na tela.
 npm run release
 ```
 
-O script compila **neste computador** o instalador do Windows e o APK do celular, onde
-os caches estão quentes: com os caches prontos, o APK sai em menos de meio minuto, contra uns 13 no
-GitHub. Depois ele marca a tag `v0.X.Y`, publica o APK (já no ar) e cria a release do
-desktop em rascunho, com o Windows e o `latest.json`.
+Tudo compila nas máquinas do Matheus, **nunca no GitHub** (2026-11-18: a fila das
+máquinas macOS do GitHub chegou a 15 minutos sem começar, e os minutos do Actions de um
+repositório privado acabam rápido). O GitHub só guarda o código e os arquivos da release,
+que é de onde os apps baixam as atualizações. Não há workflows no repositório.
 
-O Mac não compila no Windows, então o script pede ao GitHub só esse pacote
-(`.github/workflows/release.yml`). O job do Mac junta o pacote dele na mesma release,
-acrescenta as entradas dele no `latest.json` e só então tira a release do rascunho. Esse
-job roda na `main`, e não na tag, porque o GitHub só deixa uma execução ler o cache da
-própria ref ou da `main`: na tag, cada release compilava o Rust do zero.
+- **Windows e APK:** neste computador, com os caches quentes.
+- **Mac:** no Mac do Matheus, por SSH (host `mac` no `~/.ssh/config`;
+  `scripts/mac-build.mjs`). O script manda por SSH o `git archive` do commit lançado para
+  `~/.markdown-viewer-release` no Mac, compila lá e traz o `.dmg` e o `.app.tar.gz`. A
+  pasta de build guarda `node_modules` e o `target` do Cargo entre uma versão e outra.
 
-O rascunho existe de propósito. Enquanto o Mac compila, o `latest.json` ainda não tem o
-pacote dele, e um app que perguntasse nessa janela receberia a oferta de uma versão que
-não tem como baixar. A release só fica visível quando o último pacote chegou.
+Tudo compila antes de qualquer coisa ser publicada. Depois o script marca a tag `v0.X.Y`,
+publica o APK e publica a release do desktop com o `latest.json` completo.
+
+**Com o Mac fora da rede**, a versão sai para Windows e Android, e o `latest.json` fica sem
+o Mac: o app do Mac simplesmente não vê a atualização ainda. Quando o Mac voltar:
+
+```bash
+npm run release -- --only mac
+```
+
+Isso compila o Mac a partir da tag já lançada, junta os arquivos dele à mesma release e
+acrescenta as entradas dele no `latest.json`.
 
 Variações: `npm run release -- --only android` solta só um APK novo (sem tag nem
 desktop); `--only desktop` pula o celular.
@@ -130,29 +135,27 @@ da Apple.
 
 ## O app Android
 
-A mesma tag `v0.X.Y` também solta o APK do celular, pelo workflow
-`.github/workflows/android-release.yml`. É o modelo do runbook "Update OTA de app Android
+O `npm run release` também solta o APK do celular, compilado neste computador. É o
+modelo do runbook "Update OTA de app Android
 pelo GitHub Releases", no vault, com três diferenças:
 
 - **Sem token.** O repositório é público, então o app lê as releases sem autenticação.
   Um token dentro de um APK que qualquer um baixa seria de qualquer um.
-- **Releases separadas da do desktop.** A do celular sai como `android-v0.X.Y-<run>`, com o
-  asset `markdown-viewer-<run>.apk`, e nunca é marcada como latest: o atualizador do
+- **Releases separadas da do desktop.** A do celular sai como `android-v0.X.Y-<build>`, com o
+  asset `markdown-viewer-<build>.apk`, e nunca é marcada como latest: o atualizador do
   desktop lê `releases/latest`. O passo que publica o desktop marca a dele como latest de
   propósito.
 - **Sai com a versão, não a cada push.** Para soltar um APK sem versão nova:
-  `npm run release -- --only android`, ou o botão Run workflow em Actions > Release
-  Android quando este computador não estiver à mão.
+  `npm run release -- --only android`.
 
-O `versionCode` são os minutos desde 1/1/2026, a mesma conta no script e no workflow:
-cresce sozinho, quem quer que compile. A versão em `apps/mobile/app.json` tem que bater
+O `versionCode` são os minutos desde 1/1/2026, a mesma conta no `release` e no `phone`:
+cresce sozinho. A versão em `apps/mobile/app.json` tem que bater
 com a do `tauri.conf.json`.
 
 **Assinatura.** A keystore é a compartilhada por todos os apps Android do Matheus
-(`~/.android/daily-motion-release.jks`, alias `dailymotion`), nos secrets `KEYSTORE_B64` e
-`KEYSTORE_PASSWORD`. O plugin `apps/mobile/plugins/with-release-signing.js` lê do ambiente
-no CI e de `apps/mobile/android/local.properties` (`release.keystore`,
-`release.passwordFile`) no computador.
+(`~/.android/daily-motion-release.jks`, alias `dailymotion`). O plugin
+`apps/mobile/plugins/with-release-signing.js` lê de `apps/mobile/android/local.properties`
+(`release.keystore`, `release.passwordFile`).
 
 **No celular.** O app procura versão nova ao abrir e mostra um aviso no topo do vault;
 em Ajustes há "Buscar atualização". Atualizar baixa o APK e abre o instalador do Android
