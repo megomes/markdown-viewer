@@ -11,6 +11,7 @@
  */
 
 import { advance, NOT_STARTED, type Download, type DownloadEvent } from '~/app/updates'
+import { log } from '@markdown-viewer/core/log'
 import { isDesktop } from '.'
 
 export interface PendingUpdate {
@@ -20,29 +21,44 @@ export interface PendingUpdate {
   install: (watch: (download: Download) => void) => Promise<void>
 }
 
-/** The new version on offer, or nothing when there is none to be had. */
+/**
+ * The new version on offer, or nothing when there is none to be had. A failure
+ * is quiet here (the look on opening) but goes to the log.
+ */
 export async function lookForUpdate(): Promise<PendingUpdate | null> {
-  if (!isDesktop()) return null
-
   try {
-    const { check } = await import('@tauri-apps/plugin-updater')
-    const found = await check()
-    if (!found) return null
-
-    return {
-      version: found.version,
-      install: async (watch) => {
-        // The updater reports each chunk as it lands and never the sum, so the
-        // running total is kept here and handed over whole.
-        let download = NOT_STARTED
-        await found.downloadAndInstall((event) => {
-          download = advance(download, event as DownloadEvent)
-          watch(download)
-        })
-      },
-    }
-  } catch {
+    return await searchForUpdate()
+  } catch (error) {
+    log.warn('atualizacao', 'busca falhou', { motivo: messageOf(error) })
     return null
+  }
+}
+
+function messageOf(error: unknown): string {
+  return error instanceof Error ? error.message : String(error)
+}
+
+/**
+ * The same, for "Buscar atualização": a failure is thrown, so the button can
+ * say that the search failed instead of "nenhuma versão nova".
+ */
+export async function searchForUpdate(): Promise<PendingUpdate | null> {
+  if (!isDesktop()) return null
+  const { check } = await import('@tauri-apps/plugin-updater')
+  const found = await check()
+  if (!found) return null
+
+  return {
+    version: found.version,
+    install: async (watch) => {
+      // The updater reports each chunk as it lands and never the sum, so the
+      // running total is kept here and handed over whole.
+      let download = NOT_STARTED
+      await found.downloadAndInstall((event) => {
+        download = advance(download, event as DownloadEvent)
+        watch(download)
+      })
+    },
   }
 }
 

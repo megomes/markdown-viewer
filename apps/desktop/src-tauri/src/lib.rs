@@ -52,9 +52,34 @@ fn paths_from_arguments() -> Vec<String> {
 /// in the system dialog. Nothing outside a folder they chose is reachable.
 #[tauri::command]
 fn allow_base(app: tauri::AppHandle, path: String) -> Result<(), String> {
-    app.fs_scope()
+    let scope = app.fs_scope();
+    scope
         .allow_directory(&path, true)
-        .map_err(|error| error.to_string())
+        .map_err(|error| error.to_string())?;
+    // On macOS and Linux the scope's `**` does not reach a name that starts
+    // with a dot, and the vault keeps the app's state in `.markdown-viewer`
+    // ("forbidden path" on the Mac, never on Windows). Those names are allowed
+    // one by one: the app's own folder, whether it exists yet or not, and every
+    // dot file or folder already at the top of the vault.
+    let base = std::path::Path::new(&path);
+    scope
+        .allow_directory(base.join(".markdown-viewer"), true)
+        .map_err(|error| error.to_string())?;
+    if let Ok(entries) = std::fs::read_dir(base) {
+        for entry in entries.flatten() {
+            if !entry.file_name().to_string_lossy().starts_with('.') {
+                continue;
+            }
+            let item = entry.path();
+            let allowed = if item.is_dir() {
+                scope.allow_directory(&item, true)
+            } else {
+                scope.allow_file(&item)
+            };
+            allowed.map_err(|error| error.to_string())?;
+        }
+    }
+    Ok(())
 }
 
 const KEYCHAIN_SERVICE: &str = "markdown-viewer";

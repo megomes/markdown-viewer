@@ -4,7 +4,7 @@ import { FONT_LABELS, LIMITS, type BodyFont, type Settings, type ThemeMode } fro
 import type { Side } from '~/app/dock-layout'
 import { ChevronIcon, CloseIcon, GripIcon } from './icons'
 import { isDesktop } from '~/platform'
-import { lookForUpdate, offerUpdate } from '~/platform/updater'
+import { offerUpdate, searchForUpdate } from '~/platform/updater'
 
 const POSITION_KEY = 'markdown-viewer.settings.position'
 
@@ -397,14 +397,21 @@ function Segmented<T extends string>({ label, value, options, onChange }: Segmen
  * waiting for the next start. What is found is offered by the usual notice.
  */
 function UpdateCheck() {
-  const [state, setState] = useState<'idle' | 'looking' | 'current' | 'found'>('idle')
+  const [state, setState] = useState<'idle' | 'looking' | 'current' | 'found' | 'failed'>('idle')
+  const [failure, setFailure] = useState('')
   const look = () => {
     setState('looking')
-    void lookForUpdate().then((found) => {
-      if (!found) return setState('current')
-      setState('found')
-      offerUpdate(found)
-    })
+    searchForUpdate().then(
+      (found) => {
+        if (!found) return setState('current')
+        setState('found')
+        offerUpdate(found)
+      },
+      (error: unknown) => {
+        setFailure(error instanceof Error ? error.message : String(error))
+        setState('failed')
+      },
+    )
   }
   return (
     <>
@@ -423,6 +430,7 @@ function UpdateCheck() {
         </span>
       </button>
       {state === 'current' && <p className="settings-note">Nenhuma versão nova encontrada.</p>}
+      {state === 'failed' && <p className="settings-note">Não deu para buscar agora: {failure}</p>}
       {state === 'found' && (
         <p className="settings-note">Tem versão nova: o aviso para instalar apareceu na janela.</p>
       )}
