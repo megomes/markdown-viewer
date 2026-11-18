@@ -14,6 +14,7 @@
 
 import { useMemo, useState } from 'react'
 import {
+  ActivityIndicator,
   Alert,
   FlatList,
   Share,
@@ -67,6 +68,7 @@ import {
   Pencil,
   Pin,
   PinOff,
+  Search,
   Settings,
   Share2,
   Trash2,
@@ -174,12 +176,19 @@ export default function Files() {
     setProblem(null)
   }
 
+  // The button answers at once, and a second tap while the note is made does
+  // not make two.
+  const [creating, setCreating] = useState(false)
   const newNote = async () => {
+    if (creating) return
+    setCreating(true)
     try {
       const id = await createNote(folder)
       router.push({ pathname: '/note', params: { id, edit: '1' } })
     } catch (error) {
       Alert.alert('Não deu para criar a nota', messageOf(error))
+    } finally {
+      setCreating(false)
     }
   }
 
@@ -322,6 +331,14 @@ export default function Files() {
           title,
           headerRight: () => (
             <View style={styles.headerActions}>
+              <Pressable
+                onPress={() => router.push('/search')}
+                hitSlop={12}
+                accessibilityRole="button"
+                accessibilityLabel="Buscar no texto das notas"
+              >
+                <Search size={22} color={colors.textSecondary} strokeWidth={1.75} />
+              </Pressable>
               <Pressable
                 onPress={() => {
                   setTyped('')
@@ -497,7 +514,11 @@ export default function Files() {
           pressed && styles.fabPressed,
         ]}
       >
-        <Text style={styles.fabText}>+</Text>
+        {creating ? (
+          <ActivityIndicator color={colors.textPrimary} />
+        ) : (
+          <Text style={styles.fabText}>+</Text>
+        )}
       </Pressable>
 
       <Modal visible={dialog !== null} transparent animationType="fade" onRequestClose={close}>

@@ -436,6 +436,13 @@ Celular e tablet. Nasceu só de leitura; desde 2026-11-15 também edita e cria n
   volta. Um botão no topo alterna entre a página como no celular e o **modo computador**,
   que monta a página com 1280 px de largura e encolhe para caber. Sem Revisor no celular,
   por decisão do Matheus.
+- **PDF e outros arquivos** (2026-11-17) abrem no app padrão do Android: o PDF vai para
+  lá assim que é aberto, baixando antes se ainda não estiver no aparelho.
+- **Busca no texto das notas** (2026-11-17), com a mesma linguagem do desktop (`"frase"`,
+  `#tag`, `path:Pasta`, `-palavra`), pela lupa no topo da lista.
+- **App padrão para .md e .txt** (2026-11-17): um arquivo aberto de outro app (gerenciador
+  de arquivos, Drive, e-mail) abre no mesmo editor, fora do vault, e é salvo de volta na
+  origem quando o app de origem deixa.
 - Comentários, com o Revisor no toque (fica para depois; o HTML no celular não tem).
 - Feedback do app (seção 6.9).
 - Funciona offline com o que já foi baixado.

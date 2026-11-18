@@ -31,6 +31,7 @@ import { isTextFile, viewerOf } from '@markdown-viewer/core/fs'
 import NoteEditor, { type EditorCommand } from '../dom/NoteEditor'
 import { MarkdownBar } from '../ui/MarkdownBar'
 import { HtmlPage } from '../ui/HtmlPage'
+import { OutsideFile } from '../ui/OutsideFile'
 import { bytesToBase64 } from '../vault/base64'
 import { PhoneFiles } from '../vault/storage'
 import {
@@ -54,7 +55,6 @@ const files = new PhoneFiles()
 let desktopLayout = false
 
 const LATER: Record<string, string> = {
-  pdf: 'PDF',
   base: 'Bases',
   code: 'código',
 }
@@ -116,6 +116,10 @@ export default function Note() {
   // A note made a moment ago starts with the caret in its name.
   const [naming, setNaming] = useState(edit === '1')
   const [shown, setShown] = useState<Shown | null>(null)
+  // The editor is a web view, which takes a moment to start: until it says the
+  // note is drawn, the screen shows that it is on its way.
+  const [drawn, setDrawn] = useState(false)
+  const onReady = useCallback(async () => setDrawn(true), [])
   const [saveError, setSaveError] = useState<string | null>(null)
   const [command, setCommand] = useState<{ id: number; name: EditorCommand } | null>(null)
   const sendCommand = useCallback(
@@ -327,23 +331,31 @@ export default function Note() {
         text === null || path === null ? (
           <ActivityIndicator style={styles.loading} color={colors.textSecondary} />
         ) : (
-          <NoteEditor
-            text={text}
-            revision={current?.revision ?? 0}
-            path={path}
-            title={title}
-            paths={paths}
-            aliases={aliases}
-            editing={editing}
-            naming={naming}
-            readFileBase64={readFileBase64}
-            openLink={openLink}
-            onChange={onChange}
-            rename={rename}
-            pickImage={pickImage}
-            command={command}
-            dom={{ style: { flex: 1, backgroundColor: colors.bgApp } }}
-          />
+          <View style={styles.editorBox}>
+            <NoteEditor
+              onReady={onReady}
+              text={text}
+              revision={current?.revision ?? 0}
+              path={path}
+              title={title}
+              paths={paths}
+              aliases={aliases}
+              editing={editing}
+              naming={naming}
+              readFileBase64={readFileBase64}
+              openLink={openLink}
+              onChange={onChange}
+              rename={rename}
+              pickImage={pickImage}
+              command={command}
+              dom={{ style: { flex: 1, backgroundColor: colors.bgApp } }}
+            />
+            {drawn ? null : (
+              <View style={styles.cover} pointerEvents="none">
+                <ActivityIndicator color={colors.textSecondary} />
+              </View>
+            )}
+          </View>
         )
       ) : viewer === 'html' && path && hash ? (
         <HtmlPage path={path} hash={hash} desktop={desktop} />
@@ -355,16 +367,20 @@ export default function Note() {
         ) : (
           <ActivityIndicator style={styles.loading} color={colors.textSecondary} />
         )
-      ) : (
-        <View style={styles.card}>
-          <Text style={styles.cardTitle}>{name}</Text>
-          <Text style={styles.message}>
-            {viewer && LATER[viewer]
-              ? `O visualizador de ${LATER[viewer]} chega na próxima entrega do app no celular.`
-              : 'Este tipo de arquivo ainda não abre no celular.'}
-          </Text>
-        </View>
-      )}
+      ) : file && path ? (
+        <OutsideFile
+          path={path}
+          name={name}
+          size={file.size}
+          local={file.local}
+          openAtOnce={viewer === 'pdf'}
+          note={
+            viewer && LATER[viewer]
+              ? `O visualizador de ${LATER[viewer]} ainda não chegou ao celular.`
+              : undefined
+          }
+        />
+      ) : null}
       {isNote && file && editing && text !== null ? <MarkdownBar onPress={sendCommand} /> : null}
     </View>
   )
@@ -373,6 +389,17 @@ export default function Note() {
 const styles = StyleSheet.create({
   screen: { flex: 1, backgroundColor: colors.bgApp },
   loading: { marginTop: 40 },
+  editorBox: { flex: 1 },
+  cover: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    alignItems: 'center',
+    paddingTop: 40,
+    backgroundColor: colors.bgApp,
+  },
   message: { color: colors.textSecondary, fontSize: 15, lineHeight: 22, padding: 20 },
   headerActions: { flexDirection: 'row', alignItems: 'center', gap: 22 },
   saveError: {

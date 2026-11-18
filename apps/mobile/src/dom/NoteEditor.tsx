@@ -60,6 +60,8 @@ export interface NoteEditorProps {
   pickImage: (source: 'camera' | 'library') => Promise<string | null>
   /** A tap on the bar above the keyboard. A new `id` runs it once. */
   command?: { id: number; name: EditorCommand } | null
+  /** Called once the note is drawn, so the screen can drop its loading sign. */
+  onReady?: () => Promise<void>
   dom?: DOMProps
 }
 
@@ -156,6 +158,7 @@ export default function NoteEditor({
   rename,
   pickImage,
   command,
+  onReady,
 }: NoteEditorProps) {
   const host = useRef<HTMLDivElement>(null)
   const view = useRef<EditorView | null>(null)
@@ -236,6 +239,8 @@ export default function NoteEditor({
     const instance = new EditorView({ state, parent })
     view.current = instance
     instance.scrollDOM.scrollTop = scroll
+    // After the first paint, not before: what the screen uncovers is the note.
+    requestAnimationFrame(() => void onReady?.())
     builtFor.current = title
     return () => {
       flush()

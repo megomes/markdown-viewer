@@ -4,8 +4,16 @@ import { StatusBar } from 'expo-status-bar'
 import { startVault } from '../vault/runtime'
 import { checkForUpdate } from '../updates/updater'
 import { colors } from '../ui/theme'
-import { onShare, takeShared, type Shared } from '../../modules/quick-capture'
+import {
+  onOpenFile,
+  onShare,
+  takeOpened,
+  takeShared,
+  type Opened,
+  type Shared,
+} from '../../modules/quick-capture'
 import { holdShare } from '../capture/shared'
+import { holdOpened, isOpenedWaiting } from '../capture/opened'
 import { startDiagnostics } from '../diagnostics'
 import { installedLabel } from '../updates/updater'
 
@@ -18,6 +26,18 @@ function captureShared(shared: Shared): void {
   router.push('/capture')
 }
 
+/**
+ * A note opened from another app. The router goes to its screen by itself
+ * (`+native-intent.tsx`); if it did not, the note would wait forever, so the
+ * screen is opened here when nobody took it.
+ */
+function showOpened(opened: Opened): void {
+  holdOpened(opened)
+  setTimeout(() => {
+    if (isOpenedWaiting()) router.push('/external')
+  }, 400)
+}
+
 export default function RootLayout() {
   useEffect(() => {
     void startVault()
@@ -28,9 +48,13 @@ export default function RootLayout() {
     const opened = takeShared()
     const waiting = opened ? setTimeout(() => captureShared(opened), 300) : undefined
     const stop = onShare(captureShared)
+    const first = takeOpened()
+    if (first) showOpened(first)
+    const stopOpened = onOpenFile(showOpened)
     return () => {
       clearTimeout(waiting)
       stop()
+      stopOpened()
     }
   }, [])
 
@@ -51,6 +75,8 @@ export default function RootLayout() {
         <Stack.Screen name="files" options={{ title: 'Vault' }} />
         <Stack.Screen name="note" options={{ title: '' }} />
         <Stack.Screen name="capture" options={{ title: 'Captura' }} />
+        <Stack.Screen name="search" options={{ title: 'Buscar' }} />
+        <Stack.Screen name="external" options={{ title: '' }} />
         <Stack.Screen name="settings" options={{ title: 'Ajustes' }} />
       </Stack>
     </>

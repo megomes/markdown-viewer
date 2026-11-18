@@ -139,8 +139,27 @@ export class VaultMirror {
     return this.state
   }
 
-  private async saveState(): Promise<void> {
-    if (this.state) await this.options.store.save(this.state)
+  private saving: Promise<void> = Promise.resolve()
+  private queued: Promise<void> | null = null
+
+  /**
+   * One save at a time, and a burst folds into one. The catalog of a big vault
+   * is a megabyte of JSON; written once per keystroke saved, per file of a
+   * pass, the phone stopped answering taps for a moment each time. A save asked
+   * for while another is under way is the next one, which writes the state as
+   * it is by then, so whoever waits for it has their change on disk.
+   */
+  private saveState(): Promise<void> {
+    if (this.queued) return this.queued
+    const next = this.saving
+      .catch(() => {})
+      .then(async () => {
+        this.queued = null
+        if (this.state) await this.options.store.save(this.state)
+      })
+    this.queued = next
+    this.saving = next
+    return next
   }
 
   /** Every file in the vault, downloaded or not. Files deleted here are already gone. */
