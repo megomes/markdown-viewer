@@ -136,7 +136,17 @@ export function nudgeSync(delay = LOCAL_DELAY): void {
   localTimer = setTimeout(() => void runPass(), delay)
 }
 
-export async function startSync(): Promise<void> {
+let starting: Promise<void> | null = null
+
+/** Starts the sync once: two calls while it starts get the same start, not two engines. */
+export function startSync(): Promise<void> {
+  starting ??= startOnce().finally(() => {
+    starting = null
+  })
+  return starting
+}
+
+async function startOnce(): Promise<void> {
   try {
     await start()
   } catch (error) {

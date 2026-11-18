@@ -172,7 +172,16 @@ export class VaultMirror {
   async open(path: string): Promise<Uint8Array> {
     const file = await this.fileAt(path)
     if (!file) throw new Error('Arquivo fora do vault: ' + path)
-    if (file.local) return this.options.files.read(file.path)
+    if (file.local) {
+      try {
+        return await this.options.files.read(file.path)
+      } catch {
+        // Gone from the device behind the catalog's back (a version before
+        // 0.14.1 deleting a repeated copy took the file with it): the server
+        // still has it.
+        file.local = false
+      }
+    }
     const pending = this.fetching.get(file.fileId)
     if (pending) return pending
     const fetch = (async () => {
@@ -450,7 +459,11 @@ export class VaultMirror {
         record.pending.base = null
         return record.path
       }
-      if (record.local) await files.remove(record.path).catch(() => {})
+      // A copy of the same file under another id keeps what is on the device.
+      const shared = Object.values(state.files).some(
+        (file) => file.fileId !== entry.fileId && file.path === record.path,
+      )
+      if (record.local && !shared) await files.remove(record.path).catch(() => {})
       delete state.files[entry.fileId]
       await store.setBase(entry.fileId, null)
       return record.path

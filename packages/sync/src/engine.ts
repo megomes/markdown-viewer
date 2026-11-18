@@ -253,6 +253,7 @@ export class SyncEngine {
       throw new Error('A pasta do vault apareceu vazia. O sync parou para não apagar nada.')
     }
     await this.pull(state, disk, report)
+    await this.dedupe(state, report)
     const after = new Map((await this.options.files.list()).map((stat) => [stat.path, stat]))
     await this.push(state, after, report)
     return report
@@ -369,7 +370,9 @@ export class SyncEngine {
         record.hash = '' // forces the push to send it again
         return
       }
-      if (local?.status === 'clean') {
+      // A copy of the same file under another id still stands for what is on
+      // the disk: only the duplicate goes (see dedupe()).
+      if (local?.status === 'clean' && !sharesPath(state, entry.fileId, record.path)) {
         await files.remove(record.path)
         disk.delete(record.path)
         report.events.push({ kind: 'deleted', path: record.path })
@@ -462,7 +465,12 @@ export class SyncEngine {
         )
       }
       const stat = await this.writeLocal(meta.path, remoteBytes, disk)
-      if (meta.path !== record.path && disk.has(record.path) && local?.status === 'clean') {
+      if (
+        meta.path !== record.path &&
+        disk.has(record.path) &&
+        local?.status === 'clean' &&
+        !sharesPath(state, entry.fileId, record.path)
+      ) {
         await files.remove(record.path)
         disk.delete(record.path)
       }
@@ -471,6 +479,51 @@ export class SyncEngine {
       return
     }
     record.seq = entry.seq
+  }
+
+  /* --------------------------------------------------------------- dedupe */
+
+  /**
+   * One path, one file. A push that failed halfway in versions before 0.14.1
+   * left lanes sending after the pass ended, and the next pass sent the same
+   * new files again under ids of their own: the server ended up with two or
+   * three files at one path, all the same content. The copies are deleted on
+   * the server, the first one sent stays, and the file on the disk is left
+   * alone. Copies whose content differs are not touched here: the push sends
+   * what is on the disk to each of them, and they are the same by the next pass.
+   */
+  private async dedupe(state: SyncState, report: SyncReport): Promise<void> {
+    const byPath = new Map<string, [string, FileRecord][]>()
+    for (const [id, record] of Object.entries(state.files)) {
+      const group = byPath.get(record.path)
+      if (group) group.push([id, record])
+      else byPath.set(record.path, [[id, record]])
+    }
+    let removed = 0
+    for (const group of byPath.values()) {
+      if (group.length < 2) continue
+      const hash = group[0]![1].hash
+      if (!hash || group.some(([, record]) => record.hash !== hash)) continue
+      group.sort(([, a], [, b]) => a.seq - b.seq)
+      for (const [id, record] of group.slice(1)) {
+        const result = await this.options.remote.commit({
+          fileId: id,
+          parent: record.seq,
+          meta: null,
+          deleted: true,
+        })
+        if (!result.ok) {
+          report.again = true
+          return
+        }
+        delete state.files[id]
+        await this.options.store.setBase(id, null)
+        await this.saveState()
+        removed++
+      }
+    }
+    // Counted as sent: a pass that did something is followed by another.
+    report.pushed += removed
   }
 
   /* ----------------------------------------------------------------- push */
@@ -627,6 +680,11 @@ export class SyncEngine {
   }
 }
 
+/** Whether a file other than `id` is tracked at `path`. */
+function sharesPath(state: SyncState, id: string, path: string): boolean {
+  return Object.entries(state.files).some(([other, record]) => other !== id && record.path === path)
+}
+
 /** Past this many known files, a folder that lists empty stops the pass. */
 const EMPTY_GUARD = 10
 /** New files sent at once on a push. */
@@ -634,15 +692,28 @@ const FILES_AT_ONCE = 4
 /** Chunks of one file sent at once. */
 const CHUNKS_AT_ONCE = 4
 
-/** Runs `work` on every item, at most `limit` at a time, in order of start. */
+/**
+ * Runs `work` on every item, at most `limit` at a time, in order of start.
+ * The first failure stops the lanes from taking more, and the call settles only
+ * once the work already started has: lanes left running after the pass ended
+ * would send files the next pass sends again, each under an id of its own.
+ */
 async function inParallel<T>(
   items: readonly T[],
   limit: number,
   work: (item: T) => Promise<void>,
 ): Promise<void> {
   let next = 0
+  let failure: { error: unknown } | null = null
   const lane = async () => {
-    while (next < items.length) await work(items[next++]!)
+    while (!failure && next < items.length) {
+      try {
+        await work(items[next++]!)
+      } catch (error) {
+        failure ??= { error }
+      }
+    }
   }
   await Promise.all(Array.from({ length: Math.min(limit, items.length) }, lane))
+  if (failure) throw (failure as { error: unknown }).error
 }

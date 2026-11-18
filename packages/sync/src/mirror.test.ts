@@ -44,6 +44,43 @@ describe('VaultMirror', () => {
     ])
   })
 
+  it('cópias repetidas do mesmo arquivo somem do celular e o arquivo fica', async () => {
+    const { server, desktop, engine, phone, mirror } = await setup()
+    await desktop.setText('a.md', 'oi')
+    await engine.syncUntilQuiet()
+    // What a version before 0.14.1 left: the same file sent again under new ids.
+    const other = server.remote('mac')
+    await other.commit({
+      fileId: 'copia-1',
+      parent: null,
+      meta: server.log[0]!.meta,
+      deleted: false,
+    })
+    await other.commit({
+      fileId: 'copia-2',
+      parent: null,
+      meta: server.log[0]!.meta,
+      deleted: false,
+    })
+    await mirror.sync()
+    expect(await mirror.catalog()).toHaveLength(3)
+    await engine.syncUntilQuiet()
+    await mirror.sync()
+    expect((await mirror.catalog()).map((f) => f.path)).toEqual(['a.md'])
+    expect(phone.text('a.md')).toBe('oi')
+    expect(new TextDecoder().decode(await mirror.open('a.md'))).toBe('oi')
+  })
+
+  it('baixa de novo um arquivo que sumiu do aparelho sem o catálogo saber', async () => {
+    const { desktop, engine, phone, mirror } = await setup()
+    await desktop.setText('a.md', 'oi')
+    await engine.syncUntilQuiet()
+    await mirror.sync()
+    await phone.remove('a.md')
+    expect(new TextDecoder().decode(await mirror.open('a.md'))).toBe('oi')
+    expect(phone.text('a.md')).toBe('oi')
+  })
+
   it('baixa o PDF quando aberto, uma vez só, e o mantém', async () => {
     const { desktop, engine, phone, mirror } = await setup()
     await desktop.write('Manuais/grande.pdf', bytes(5000))

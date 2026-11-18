@@ -265,6 +265,62 @@ describe('vault grande', () => {
     void server
   })
 
+  /** Files the server has now, by id: the newest entry of each, not deleted. */
+  const live = (server: MemoryServer) => {
+    const latest = new Map<string, boolean>()
+    for (const entry of server.log) latest.set(entry.fileId, entry.deleted)
+    return [...latest.values()].filter((deleted) => !deleted).length
+  }
+
+  it('um envio que cai no meio não deixa o mesmo arquivo duas vezes no servidor', async () => {
+    const server = new MemoryServer()
+    const crypto = await VaultCrypto.create(await createVaultKey())
+    const files = new MemoryFiles()
+    const remote = server.remote('pc')
+    let commits = 0
+    const engine = new SyncEngine({
+      files,
+      store: new MemoryStore(),
+      remote: {
+        ...remote,
+        commit: async (commit) => {
+          if (++commits === 5) throw new Error('Failed to fetch')
+          await new Promise((done) => setTimeout(done, 1))
+          return remote.commit(commit)
+        },
+      },
+      crypto,
+      deviceName: 'pc',
+    })
+    for (let i = 0; i < 30; i++) await files.write(`n${i}.md`, text(String(i)))
+    await expect(engine.sync()).rejects.toThrow(/fetch/)
+    const after = commits
+    await new Promise((done) => setTimeout(done, 20))
+    // Nothing keeps sending once the pass is over.
+    expect(commits).toBe(after)
+    await engine.syncUntilQuiet()
+    expect(live(server)).toBe(30)
+  })
+
+  it('apaga no servidor as cópias repetidas de um arquivo e deixa o arquivo', async () => {
+    const { server, devices } = await setup()
+    const [mac] = devices
+    await mac!.files.write('a.md', text('oi'))
+    await settle(devices)
+    // What a version before 0.14.1 left: the same file sent again under new ids.
+    const first = server.log[0]!
+    const other = server.remote('mac')
+    await other.commit({ fileId: 'copia-1', parent: null, meta: first.meta, deleted: false })
+    await other.commit({ fileId: 'copia-2', parent: null, meta: first.meta, deleted: false })
+    expect(live(server)).toBe(3)
+    await settle(devices)
+    expect(live(server)).toBe(1)
+    for (const device of devices) {
+      expect(new TextDecoder().decode(await device.files.read('a.md'))).toBe('oi')
+      expect(await device.files.list()).toHaveLength(1)
+    }
+  })
+
   it('conta o progresso da rodada inteira, sem recomeçar nem diminuir o total', async () => {
     const server = new MemoryServer()
     const crypto = await VaultCrypto.create(await createVaultKey())
