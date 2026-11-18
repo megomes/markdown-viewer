@@ -57,7 +57,16 @@ function shim(initial: Record<string, string>): string {
     var a = event.target && event.target.closest ? event.target.closest('a[href]') : null;
     if (!a) return;
     var href = a.getAttribute('href');
-    if (!href || href.charAt(0) === '#' || /^javascript:/i.test(href)) return;
+    if (!href || /^javascript:/i.test(href)) return;
+    if (href.charAt(0) === '#') {
+      // A section of this same page. The <base> points at the file's folder,
+      // so left alone "#branches" would load the folder itself: a blank frame.
+      // The hash of this document is set instead, which scrolls there and lets
+      // the page's own hashchange code run.
+      event.preventDefault();
+      if (href.length > 1) location.hash = href.slice(1);
+      return;
+    }
     event.preventDefault();
     parent.postMessage({ __mdv: 'open', href: href }, '*');
   }, true);
