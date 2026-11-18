@@ -66,6 +66,9 @@
     "createUpdaterArtifacts": true
   },
   "plugins": {
+    "fs": {
+      "requireLiteralLeadingDot": false
+    },
     "updater": {
       "endpoints": [
         "https://github.com/megomes/markdown-viewer/releases/latest/download/latest.json"
