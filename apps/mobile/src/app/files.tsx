@@ -12,7 +12,7 @@
  * each with its icon and colour.
  */
 
-import { useMemo, useState } from 'react'
+import { useCallback, useMemo, useState } from 'react'
 import {
   ActivityIndicator,
   Alert,
@@ -26,9 +26,12 @@ import {
   StyleSheet,
   Text,
   TextInput,
+  useWindowDimensions,
   View,
 } from 'react-native'
 import { router, Stack, useLocalSearchParams } from 'expo-router'
+import { NoteView } from './note'
+import { TreePane } from '../ui/TreePane'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import {
   allFolders,
@@ -50,7 +53,7 @@ import {
   type TreeNode,
 } from '../vault/runtime'
 import { useUpdates } from '../updates/updater'
-import { colors, radius } from '../ui/theme'
+import { colors, radius, sidebarBackground } from '../ui/theme'
 import { hasVaultIcon, VaultIcon } from '../ui/VaultIcon'
 import { TransferBar } from '../ui/TransferBar'
 import {
@@ -118,9 +121,22 @@ type Dialog =
   | { kind: 'copy'; node: TreeNode }
   | { kind: 'folder' }
 
+/** From this width up the screen is a tablet's: the tree and the note side by side. */
+const TABLET_WIDTH = 720
+const SIDEBAR_WIDTH = 320
+
 export default function Files() {
   const { folder = '' } = useLocalSearchParams<{ folder?: string }>()
   const vault = useVault()
+  const { width } = useWindowDimensions()
+  // The tablet opens folders in its tree, so only the first screen splits.
+  const tablet = width >= TABLET_WIDTH && !folder
+  const [selected, setSelected] = useState<{ id: string; edit: boolean } | null>(null)
+  const selectedPath = selected
+    ? (vault.files.find((file) => file.fileId === selected.id)?.path ?? null)
+    : null
+  const openInPanel = useCallback((id: string) => setSelected({ id, edit: false }), [])
+  const hiddenInTree = useCallback((node: TreeNode) => node.name.startsWith('.'), [])
   const updates = useUpdates()
   const insets = useSafeAreaInsets()
   const all = useMemo(
@@ -168,6 +184,7 @@ export default function Files() {
   const open = (node: TreeNode) => {
     if (node.kind === 'directory')
       router.push({ pathname: '/files', params: { folder: node.path } })
+    else if (node.fileId && tablet) setSelected({ id: node.fileId, edit: false })
     else if (node.fileId) router.push({ pathname: '/note', params: { id: node.fileId } })
   }
 
@@ -184,7 +201,8 @@ export default function Files() {
     setCreating(true)
     try {
       const id = await createNote(folder)
-      router.push({ pathname: '/note', params: { id, edit: '1' } })
+      if (tablet) setSelected({ id, edit: true })
+      else router.push({ pathname: '/note', params: { id, edit: '1' } })
     } catch (error) {
       Alert.alert('Não deu para criar a nota', messageOf(error))
     } finally {
@@ -203,7 +221,9 @@ export default function Files() {
     const bad = nameProblem(typed)
     if (bad) return setProblem(bad)
     try {
-      await relocate(node.path, (folder ? folder + '/' : '') + typed.trim() + extension)
+      // The file's own folder: on the tablet it can be deep in the tree.
+      const parent = node.path.includes('/') ? node.path.slice(0, node.path.lastIndexOf('/')) : ''
+      await relocate(node.path, (parent ? parent + '/' : '') + typed.trim() + extension)
       close()
     } catch (error) {
       setProblem(messageOf(error))
@@ -329,6 +349,7 @@ export default function Files() {
       <Stack.Screen
         options={{
           title,
+          headerStyle: { backgroundColor: colors.bgSidebar },
           headerRight: () => (
             <View style={styles.headerActions}>
               <Pressable
@@ -384,133 +405,172 @@ export default function Files() {
           </Text>
         </Pressable>
       ) : null}
-      <FlatList
-        data={nodes}
-        keyExtractor={(node) => node.path}
-        contentContainerStyle={{ paddingBottom: 96 + insets.bottom }}
-        ListHeaderComponent={
-          cards.length > 0 ? (
-            <View style={styles.cards}>
-              {cards.map((card) => {
-                const tint = accentOf(vault.environmentColors[card.path]).dark
-                const icon = vault.icons[card.path]
-                const notes = counts[card.path] ?? 0
-                return (
-                  <Pressable
-                    key={card.path}
-                    onPress={() => open(card)}
-                    onLongPress={() => setDialog({ kind: 'actions', node: card })}
-                    delayLongPress={350}
-                    style={({ pressed }) => [styles.card, pressed && styles.rowPressed]}
-                  >
-                    {/* Filled with the environment's colour, lit from the top, as on the desktop. */}
-                    <View
-                      style={[
-                        styles.cardTile,
-                        {
-                          backgroundColor: tint,
-                          backgroundImage: `linear-gradient(160deg, rgba(255,255,255,0.24), rgba(255,255,255,0) 55%), linear-gradient(160deg, ${tint}, ${tint}99)`,
-                          boxShadow: `0 4px 12px ${tint}55`,
-                        },
-                      ]}
+      {tablet ? (
+        <View style={styles.split}>
+          <View style={[styles.sidePanel, sidebarBackground]}>
+            <TreePane
+              files={vault.files}
+              folders={vault.folders}
+              icons={vault.icons}
+              selected={selectedPath}
+              hidden={hiddenInTree}
+              onOpen={open}
+              onLongPress={(node) => setDialog({ kind: 'actions', node })}
+              footerSpace={96 + insets.bottom}
+            />
+          </View>
+          <View style={styles.contentPanel}>
+            {selected ? (
+              <NoteView
+                key={selected.id}
+                id={selected.id}
+                edit={selected.edit}
+                embedded
+                onOpenNote={openInPanel}
+              />
+            ) : (
+              <Text style={styles.emptyPanel}>Escolha uma nota na árvore.</Text>
+            )}
+          </View>
+        </View>
+      ) : (
+        <FlatList
+          data={nodes}
+          keyExtractor={(node) => node.path}
+          contentContainerStyle={{ paddingBottom: 96 + insets.bottom }}
+          ListHeaderComponent={
+            cards.length > 0 ? (
+              <View style={styles.cards}>
+                {cards.map((card) => {
+                  const tint = accentOf(vault.environmentColors[card.path]).dark
+                  const icon = vault.icons[card.path]
+                  const notes = counts[card.path] ?? 0
+                  return (
+                    <Pressable
+                      key={card.path}
+                      onPress={() => open(card)}
+                      onLongPress={() => setDialog({ kind: 'actions', node: card })}
+                      delayLongPress={350}
+                      style={({ pressed }) => [styles.card, pressed && styles.rowPressed]}
                     >
-                      {hasVaultIcon(icon) ? (
-                        <VaultIcon name={icon} size={22} color="#ffffff" />
-                      ) : (
-                        <LayoutGrid size={22} color="#ffffff" strokeWidth={2} />
-                      )}
-                    </View>
-                    <View style={styles.cardText}>
-                      <Text style={styles.cardName} numberOfLines={1}>
-                        {card.name}
-                      </Text>
-                      <Text style={styles.meta}>{notes === 1 ? '1 nota' : `${notes} notas`}</Text>
-                    </View>
-                    <ChevronRight size={18} color={colors.textTertiary} strokeWidth={1.75} />
-                  </Pressable>
-                )
-              })}
-              {nodes.length > 0 || aside > 0 ? (
-                <Text style={styles.section}>Fora dos ambientes</Text>
-              ) : null}
-            </View>
-          ) : undefined
-        }
-        ListFooterComponent={
-          aside > 0 ? (
+                      {/* Filled with the environment's colour, lit from the top, as on the desktop. */}
+                      <View
+                        style={[
+                          styles.cardTile,
+                          {
+                            backgroundColor: tint,
+                            backgroundImage: `linear-gradient(160deg, rgba(255,255,255,0.24), rgba(255,255,255,0) 55%), linear-gradient(160deg, ${tint}, ${tint}99)`,
+                            boxShadow: `0 4px 12px ${tint}55`,
+                          },
+                        ]}
+                      >
+                        {hasVaultIcon(icon) ? (
+                          <VaultIcon name={icon} size={22} color="#ffffff" />
+                        ) : (
+                          <LayoutGrid size={22} color="#ffffff" strokeWidth={2} />
+                        )}
+                      </View>
+                      <View style={styles.cardText}>
+                        <Text style={styles.cardName} numberOfLines={1}>
+                          {card.name}
+                        </Text>
+                        <Text style={styles.meta}>{notes === 1 ? '1 nota' : `${notes} notas`}</Text>
+                      </View>
+                      <ChevronRight size={18} color={colors.textTertiary} strokeWidth={1.75} />
+                    </Pressable>
+                  )
+                })}
+                {nodes.length > 0 || aside > 0 ? (
+                  <Text style={styles.section}>Fora dos ambientes</Text>
+                ) : null}
+              </View>
+            ) : undefined
+          }
+          ListFooterComponent={
+            aside > 0 ? (
+              <Pressable
+                onPress={() => setEverything(!everything)}
+                style={({ pressed }) => [styles.row, pressed && styles.rowPressed]}
+              >
+                <View style={styles.icon} />
+                <Text style={styles.others}>
+                  {everything
+                    ? 'mostrar só as notas'
+                    : aside === 1
+                      ? 'mais 1 item (anexos, PDFs, ocultos)'
+                      : `mais ${aside} itens (anexos, PDFs, ocultos)`}
+                </Text>
+              </Pressable>
+            ) : undefined
+          }
+          refreshControl={
+            <RefreshControl
+              refreshing={vault.syncing}
+              onRefresh={() => void syncNow()}
+              tintColor={colors.textSecondary}
+              colors={[colors.accent]}
+              progressBackgroundColor={colors.surface1}
+            />
+          }
+          ListEmptyComponent={
+            cards.length > 0 || aside > 0 ? undefined : (
+              <Text style={styles.empty}>
+                {vault.syncing ? 'Baixando o vault…' : 'Nada aqui ainda. O botão + cria uma nota.'}
+              </Text>
+            )
+          }
+          renderItem={({ item }) => (
             <Pressable
-              onPress={() => setEverything(!everything)}
+              onPress={() => open(item)}
+              onLongPress={() => setDialog({ kind: 'actions', node: item })}
+              delayLongPress={350}
               style={({ pressed }) => [styles.row, pressed && styles.rowPressed]}
             >
-              <View style={styles.icon} />
-              <Text style={styles.others}>
-                {everything
-                  ? 'mostrar só as notas'
-                  : aside === 1
-                    ? 'mais 1 item (anexos, PDFs, ocultos)'
-                    : `mais ${aside} itens (anexos, PDFs, ocultos)`}
+              <View style={styles.icon}>
+                {hasVaultIcon(vault.icons[item.path]) ? (
+                  <VaultIcon
+                    name={vault.icons[item.path]!}
+                    color={item.kind === 'directory' ? accent : colors.textSecondary}
+                  />
+                ) : item.kind === 'directory' ? (
+                  <Folder size={18} color={colors.toneBlue} strokeWidth={1.75} />
+                ) : (
+                  <FileText
+                    size={18}
+                    color={NOTE.test(item.name) ? colors.accentText : colors.textTertiary}
+                    strokeWidth={1.75}
+                  />
+                )}
+              </View>
+              <Text
+                style={[styles.name, item.kind === 'directory' && styles.folder]}
+                numberOfLines={1}
+              >
+                {item.kind === 'file' ? item.name.replace(/\.md$/i, '') : item.name}
               </Text>
+              {item.fileId && vault.pins.includes(item.fileId) ? (
+                <Pin size={14} color={accent} strokeWidth={1.75} />
+              ) : null}
+              {item.kind === 'file' && item.pending ? (
+                <Text style={styles.meta}>esperando envio</Text>
+              ) : item.kind === 'file' && !item.local ? (
+                <Text style={styles.meta}>{sizeLabel(item.size)} · baixa ao abrir</Text>
+              ) : null}
+              {item.kind === 'directory' ? (
+                <ChevronRight size={16} color={colors.textDisabled} strokeWidth={1.75} />
+              ) : null}
             </Pressable>
-          ) : undefined
-        }
-        refreshControl={
-          <RefreshControl
-            refreshing={vault.syncing}
-            onRefresh={() => void syncNow()}
-            tintColor={colors.textSecondary}
-            colors={[colors.accent]}
-            progressBackgroundColor={colors.surface1}
-          />
-        }
-        ListEmptyComponent={
-          cards.length > 0 || aside > 0 ? undefined : (
-            <Text style={styles.empty}>
-              {vault.syncing ? 'Baixando o vault…' : 'Nada aqui ainda. O botão + cria uma nota.'}
-            </Text>
-          )
-        }
-        renderItem={({ item }) => (
-          <Pressable
-            onPress={() => open(item)}
-            onLongPress={() => setDialog({ kind: 'actions', node: item })}
-            delayLongPress={350}
-            style={({ pressed }) => [styles.row, pressed && styles.rowPressed]}
-          >
-            <View style={styles.icon}>
-              {hasVaultIcon(vault.icons[item.path]) ? (
-                <VaultIcon
-                  name={vault.icons[item.path]!}
-                  color={item.kind === 'directory' ? accent : colors.textSecondary}
-                />
-              ) : item.kind === 'directory' ? (
-                <Folder size={18} color={accent} strokeWidth={1.75} />
-              ) : (
-                <FileText size={18} color={colors.textTertiary} strokeWidth={1.75} />
-              )}
-            </View>
-            <Text
-              style={[styles.name, item.kind === 'directory' && styles.folder]}
-              numberOfLines={1}
-            >
-              {item.kind === 'file' ? item.name.replace(/\.md$/i, '') : item.name}
-            </Text>
-            {item.fileId && vault.pins.includes(item.fileId) ? (
-              <Pin size={14} color={accent} strokeWidth={1.75} />
-            ) : null}
-            {item.kind === 'file' && item.pending ? (
-              <Text style={styles.meta}>esperando envio</Text>
-            ) : item.kind === 'file' && !item.local ? (
-              <Text style={styles.meta}>{sizeLabel(item.size)} · baixa ao abrir</Text>
-            ) : null}
-          </Pressable>
-        )}
-      />
+          )}
+        />
+      )}
       <Pressable
         onPress={() => void newNote()}
         accessibilityLabel="Nova nota"
         style={({ pressed }) => [
           styles.fab,
           { bottom: 24 + insets.bottom, backgroundColor: accent },
+          // On the tablet it belongs to the tree, not over the note.
+          tablet && { right: undefined, left: SIDEBAR_WIDTH - 66 },
           pressed && styles.fabPressed,
         ]}
       >
@@ -761,7 +821,7 @@ function SheetButton({
 }
 
 const styles = StyleSheet.create({
-  screen: { flex: 1, backgroundColor: colors.bgApp },
+  screen: { flex: 1, ...sidebarBackground },
   status: {
     color: colors.textTertiary,
     fontSize: 12,
@@ -780,16 +840,44 @@ const styles = StyleSheet.create({
     borderColor: colors.borderDefault,
   },
   bannerText: { color: colors.textPrimary, fontSize: 14, lineHeight: 20 },
+  // The tablet: the desktop's panels, floating on the black frame.
+  split: {
+    flex: 1,
+    flexDirection: 'row',
+    gap: 8,
+    padding: 8,
+    paddingTop: 0,
+    backgroundColor: colors.bgApp,
+  },
+  sidePanel: {
+    width: SIDEBAR_WIDTH,
+    borderRadius: radius.xl,
+    borderWidth: 1,
+    borderColor: colors.borderSubtle,
+    overflow: 'hidden',
+    paddingTop: 10,
+  },
+  contentPanel: {
+    flex: 1,
+    borderRadius: radius.xl,
+    borderWidth: 1,
+    borderColor: colors.borderSubtle,
+    backgroundColor: colors.bgContent,
+    overflow: 'hidden',
+  },
+  emptyPanel: { color: colors.textTertiary, fontSize: 15, padding: 28 },
+  // The desktop's tree rows, sized for a finger: no lines between them, a
+  // rounded light under the one being touched.
   row: {
     flexDirection: 'row',
     alignItems: 'center',
-    paddingHorizontal: 20,
-    paddingVertical: 13,
+    marginHorizontal: 8,
+    paddingHorizontal: 12,
+    minHeight: 46,
     gap: 12,
-    borderBottomWidth: StyleSheet.hairlineWidth,
-    borderBottomColor: colors.borderSubtle,
+    borderRadius: radius.sm,
   },
-  rowPressed: { backgroundColor: colors.surfaceHover },
+  rowPressed: { backgroundColor: colors.surface3 },
   icon: { width: 22, alignItems: 'center' },
   others: { color: colors.textTertiary, fontSize: 14, flex: 1 },
   cards: { paddingHorizontal: 16, paddingTop: 4, paddingBottom: 6, gap: 10 },
@@ -813,15 +901,16 @@ const styles = StyleSheet.create({
   cardText: { flex: 1, gap: 2 },
   cardName: { color: colors.textPrimary, fontSize: 17, fontWeight: '600' },
   section: {
-    color: colors.textTertiary,
-    fontSize: 12,
-    letterSpacing: 0.6,
+    color: colors.textDisabled,
+    fontSize: 11,
+    fontWeight: '600',
+    letterSpacing: 0.8,
     textTransform: 'uppercase',
     paddingHorizontal: 4,
-    paddingTop: 10,
+    paddingTop: 14,
   },
-  name: { color: colors.textPrimary, fontSize: 16, flex: 1 },
-  folder: { fontWeight: '600' },
+  name: { color: colors.textSecondary, fontSize: 15.5, flex: 1 },
+  folder: { color: colors.textPrimary, fontWeight: '500' },
   meta: { color: colors.textTertiary, fontSize: 12 },
   empty: { color: colors.textTertiary, padding: 20, fontSize: 15 },
   fab: {

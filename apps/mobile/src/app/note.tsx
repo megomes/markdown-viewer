@@ -32,6 +32,8 @@ import NoteEditor, { type EditorCommand } from '../dom/NoteEditor'
 import { MarkdownBar } from '../ui/MarkdownBar'
 import { HtmlPage } from '../ui/HtmlPage'
 import { OutsideFile } from '../ui/OutsideFile'
+import BaseScreen from '../dom/BaseScreen'
+import type { BaseFile } from '@markdown-viewer/core/bases'
 import { bytesToBase64 } from '../vault/base64'
 import { PhoneFiles } from '../vault/storage'
 import {
@@ -55,7 +57,6 @@ const files = new PhoneFiles()
 let desktopLayout = false
 
 const LATER: Record<string, string> = {
-  base: 'Bases',
   code: 'código',
 }
 
@@ -98,6 +99,23 @@ function useKeyboardHeight(): number {
 
 export default function Note() {
   const { id, edit } = useLocalSearchParams<{ id: string; edit?: string }>()
+  return <NoteView id={id} edit={edit === '1'} />
+}
+
+interface NoteViewProps {
+  id: string
+  /** Opens with the editor on and the caret in the name: a note just made. */
+  edit?: boolean
+  /**
+   * Inside the tablet's right panel instead of a screen of its own: the title
+   * and the buttons go in a bar of the panel, and links open in the panel.
+   */
+  embedded?: boolean
+  onOpenNote?: (id: string) => void
+}
+
+/** One file of the vault, as a screen of its own or as the tablet's right panel. */
+export function NoteView({ id, edit = false, embedded = false, onOpenNote }: NoteViewProps) {
   const vault = useVault()
   const file = useMemo(
     () => vault.files.find((item) => item.fileId === id) ?? null,
@@ -112,9 +130,9 @@ export default function Note() {
   const isNote = isTextFile(name)
   const hash = file?.hash ?? null
 
-  const [editing, setEditing] = useState(edit === '1')
+  const [editing, setEditing] = useState(edit)
   // A note made a moment ago starts with the caret in its name.
-  const [naming, setNaming] = useState(edit === '1')
+  const [naming, setNaming] = useState(edit)
   const [shown, setShown] = useState<Shown | null>(null)
   // The editor is a web view, which takes a moment to start: until it says the
   // note is drawn, the screen shows that it is on its way.
@@ -146,11 +164,12 @@ export default function Note() {
       opened.current = id
       setShown((old) => ({ id, revision: (old?.revision ?? 0) + 1, ...value }))
     }
-    const load = isNote
-      ? readText(now.path).then((text) => show({ text }))
-      : viewer === 'image'
-        ? readFile(now.path).then(() => show({ imageUri: files.uri(now.path) + '?v=' + hash }))
-        : Promise.resolve()
+    const load =
+      isNote || viewer === 'base'
+        ? readText(now.path).then((text) => show({ text }))
+        : viewer === 'image'
+          ? readFile(now.path).then(() => show({ imageUri: files.uri(now.path) + '?v=' + hash }))
+          : Promise.resolve()
     load.catch((e: unknown) => show({ error: messageOf(e) }))
     return () => {
       live = false
@@ -170,6 +189,23 @@ export default function Note() {
     return out
   }, [vault.index])
 
+  // What a Base reads: the notes of the index, with their properties.
+  const baseFiles: BaseFile[] = useMemo(
+    () =>
+      viewer !== 'base'
+        ? []
+        : Object.values(vault.index.files)
+            .filter((item) => /\.(md|markdown)$/i.test(item.path))
+            .map((item) => ({
+              path: item.path,
+              tags: item.tags,
+              links: item.links,
+              embeds: item.embeds,
+              properties: item.properties,
+            })),
+    [viewer, vault.index],
+  )
+
   const readFileBase64 = useCallback(
     async (wanted: string) => bytesToBase64(await readFile(wanted)),
     [],
@@ -177,10 +213,17 @@ export default function Note() {
   // The answer to this call goes back into the note's web view; navigating in
   // the same moment took that view off screen first and the answer had nowhere
   // to land. The next note opens just after.
-  const openLink = useCallback(async (target: string) => {
-    const targetId = idAt(target)
-    if (targetId) setTimeout(() => router.push({ pathname: '/note', params: { id: targetId } }), 50)
-  }, [])
+  const openLink = useCallback(
+    async (target: string) => {
+      const targetId = idAt(target)
+      if (!targetId) return
+      setTimeout(() => {
+        if (onOpenNote) onOpenNote(targetId)
+        else router.push({ pathname: '/note', params: { id: targetId } })
+      }, 50)
+    },
+    [onOpenNote],
+  )
 
   const onChange = useCallback(
     async (next: string) => {
@@ -309,13 +352,22 @@ export default function Note() {
 
   return (
     <View style={[styles.screen, { paddingBottom: keyboard > 0 ? keyboard : insets.bottom }]}>
-      <Stack.Screen
-        options={{
-          title,
-          headerRight:
-            isNote && file ? headerRight : viewer === 'html' && file ? htmlRight : undefined,
-        }}
-      />
+      {embedded ? (
+        <View style={styles.panelBar}>
+          <Text style={styles.panelTitle} numberOfLines={1}>
+            {title}
+          </Text>
+          {isNote && file ? headerRight() : viewer === 'html' && file ? htmlRight() : null}
+        </View>
+      ) : (
+        <Stack.Screen
+          options={{
+            title,
+            headerRight:
+              isNote && file ? headerRight : viewer === 'html' && file ? htmlRight : undefined,
+          }}
+        />
+      )}
       {saveError ? <Text style={styles.saveError}>Não deu para salvar: {saveError}</Text> : null}
       {vault.phase === 'loading' ? (
         <ActivityIndicator style={styles.loading} color={colors.textSecondary} />
@@ -357,6 +409,20 @@ export default function Note() {
             )}
           </View>
         )
+      ) : viewer === 'base' ? (
+        text === null ? (
+          <ActivityIndicator style={styles.loading} color={colors.textSecondary} />
+        ) : (
+          <BaseScreen
+            name={title.replace(/\.base$/i, '')}
+            text={text}
+            files={baseFiles}
+            ready={vault.index.done}
+            readFileBase64={readFileBase64}
+            openNote={openLink}
+            dom={{ style: { flex: 1, backgroundColor: colors.bgContent } }}
+          />
+        )
       ) : viewer === 'html' && path && hash ? (
         <HtmlPage path={path} hash={hash} desktop={desktop} />
       ) : viewer === 'image' ? (
@@ -389,6 +455,16 @@ export default function Note() {
 const styles = StyleSheet.create({
   screen: { flex: 1, backgroundColor: colors.bgApp },
   loading: { marginTop: 40 },
+  panelBar: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 16,
+    minHeight: 52,
+    paddingHorizontal: 20,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomColor: colors.borderSubtle,
+  },
+  panelTitle: { flex: 1, color: colors.textPrimary, fontSize: 16, fontWeight: '600' },
   editorBox: { flex: 1 },
   cover: {
     position: 'absolute',
