@@ -17,6 +17,8 @@ export interface SearchDoc {
   text: string
   tags: string[]
   aliases: string[]
+  /** `fold(text)`, when the caller keeps it: folding a whole vault per query is slow on a phone. */
+  folded?: string
 }
 
 export interface SearchMatch {
@@ -107,7 +109,7 @@ export function search(raw: string, docs: Iterable<SearchDoc>, limit = 200): Sea
     if (query.tags.some((tag) => !hasTag(doc, tag))) continue
     const folderPath = fold(doc.path)
     if (query.paths.some((p) => !folderPath.includes(p))) continue
-    const body = fold(doc.text)
+    const body = doc.folded ?? fold(doc.text)
     const named = fold(doc.title + ' ' + doc.path + ' ' + doc.aliases.join(' '))
     if (needles.some((n) => !body.includes(n) && !named.includes(n))) continue
     if (query.excluded.some((n) => body.includes(n))) continue

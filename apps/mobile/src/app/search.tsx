@@ -17,7 +17,7 @@ import { router, Stack } from 'expo-router'
 import { Search } from 'lucide-react-native'
 import type { SearchResult } from '@markdown-viewer/core/search'
 import { idAt, useVault } from '../vault/runtime'
-import { searchVault } from '../vault/search'
+import { searchVault, warmSearch } from '../vault/search'
 import { colors, radius } from '../ui/theme'
 
 /** The words of a line, with the hits in their own style. */
@@ -48,6 +48,12 @@ export default function SearchScreen() {
   const [answered, setAnswered] = useState<{ query: string; items: SearchResult[] } | null>(null)
   const trimmed = query.trim()
   const busy = trimmed !== '' && answered?.query !== trimmed
+
+  // The first search reads every note; it starts as the screen opens.
+  useEffect(() => {
+    void warmSearch(vault.index, vault.files)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
 
   useEffect(() => {
     if (!trimmed) return

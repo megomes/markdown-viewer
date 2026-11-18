@@ -446,7 +446,11 @@ Celular e tablet. Nasceu só de leitura; desde 2026-11-15 também edita e cria n
 - Comentários, com o Revisor no toque (fica para depois; o HTML no celular não tem).
 - Feedback do app (seção 6.9).
 - Funciona offline com o que já foi baixado.
-- No tablet, árvore e nota lado a lado.
+- No tablet, árvore e nota lado a lado (2026-11-18): a partir de 720 dp de largura a tela
+  vira os painéis do desktop, com a árvore expansível (linhas-guia, pasta azul, nota na cor
+  de destaque) à esquerda e a nota à direita. No celular a lista segue a mesma linha visual.
+- **Bases no celular** (2026-11-18): o mesmo `BaseView` do desktop (abas de visões,
+  tabela, cartões). No celular cada célula fica numa linha e a tabela rola para o lado.
 - **Captura rápida** (2026-11-16). "Compartilhar" de qualquer app (página, texto, imagens)
   abre uma nota pronta para salvar: a página vira um link com o título dela, a imagem vira
   anexo. Vai para a pasta de captura, que por padrão é o `Backlog` mais perto da raiz e

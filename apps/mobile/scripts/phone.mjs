@@ -82,6 +82,11 @@ run(
   join(android, windows ? 'gradlew.bat' : 'gradlew'),
   [
     'assembleRelease',
+    // The web pages of the app (the note, the Base) are bundled by this task,
+    // and Gradle does not count their CSS as its input: a change to a CSS file
+    // alone shipped the old one. Always run it.
+    'createBundleReleaseJsAndAssets',
+    '--rerun',
     `-PreactNativeArchitectures=${abi}`,
     '--build-cache',
     '-x',

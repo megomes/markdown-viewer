@@ -345,11 +345,11 @@ export default function Files() {
   }, [dialog, vault.files, vault.folders, folder])
 
   return (
-    <View style={styles.screen}>
+    <View style={tablet ? styles.tabletScreen : styles.screen}>
       <Stack.Screen
         options={{
           title,
-          headerStyle: { backgroundColor: colors.bgSidebar },
+          headerStyle: { backgroundColor: tablet ? colors.bgApp : colors.bgSidebar },
           headerRight: () => (
             <View style={styles.headerActions}>
               <Pressable
@@ -822,6 +822,8 @@ function SheetButton({
 
 const styles = StyleSheet.create({
   screen: { flex: 1, ...sidebarBackground },
+  // The tablet's frame is black, like the desktop's; the panels carry the colour.
+  tabletScreen: { flex: 1, backgroundColor: colors.bgApp },
   status: {
     color: colors.textTertiary,
     fontSize: 12,

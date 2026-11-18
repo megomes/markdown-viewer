@@ -7,8 +7,17 @@ body,
   background: var(--bg-content);
 }
 
-#root > .viewer {
+/* The page is as wide as the screen. Left alone, the flex column grew to the
+   width of the widest table and took the bar with it, off the screen: only the
+   body scrolls sideways. */
+.viewer {
   height: 100%;
+  width: 100vw;
+  overflow: hidden;
+}
+
+.viewer > * {
+  min-width: 0;
 }
 
 /* A phone is narrow: the bar wraps, and a wide table scrolls sideways. */
@@ -20,4 +29,19 @@ body,
 .base-body {
   overflow: auto;
   -webkit-overflow-scrolling: touch;
+}
+
+/* A narrow screen cannot give each column room to wrap: a cell stays on one
+   line, cut with an ellipsis, and the table scrolls sideways instead of
+   growing rows hundreds of pixels tall. */
+.base-table td,
+.base-table th {
+  max-width: 240px;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.base-table td:first-child {
+  max-width: 200px;
 }

@@ -8,7 +8,7 @@
  * next ones answer at once. Files not on the device are searched by name only.
  */
 
-import { search, type SearchDoc, type SearchResult } from '@markdown-viewer/core/search'
+import { fold, search, type SearchDoc, type SearchResult } from '@markdown-viewer/core/search'
 import { htmlText } from '@markdown-viewer/core/html'
 import { decode } from '@markdown-viewer/core/text'
 import type { BaseIndex } from '@markdown-viewer/core/base-index'
@@ -16,24 +16,33 @@ import type { MirrorFile } from '@markdown-viewer/sync/mirror'
 import { PhoneFiles } from './storage'
 
 const files = new PhoneFiles()
-const texts = new Map<string, { hash: string; text: string }>()
+const texts = new Map<string, { hash: string; text: string; folded: string }>()
 /** Read at once: enough to keep the disk busy, few enough to leave the screen alone. */
 const BATCH = 16
 
 const yieldToScreen = () => new Promise<void>((done) => setTimeout(done, 0))
 
-async function textOf(file: MirrorFile): Promise<string> {
+const EMPTY = { text: '', folded: '' }
+
+/** The note's text, and the same without accents or capitals, read once per version. */
+async function textOf(file: MirrorFile): Promise<{ text: string; folded: string }> {
   const known = texts.get(file.path)
-  if (known?.hash === file.hash) return known.text
-  if (!file.local) return ''
+  if (known?.hash === file.hash) return known
+  if (!file.local) return EMPTY
   try {
     const raw = decode(await files.read(file.path)).text
     const text = /\.html?$/i.test(file.path) ? htmlText(raw) : raw
-    texts.set(file.path, { hash: file.hash, text })
-    return text
+    const entry = { hash: file.hash, text, folded: fold(text) }
+    texts.set(file.path, entry)
+    return entry
   } catch {
-    return ''
+    return EMPTY
   }
+}
+
+/** Reads the notes ahead, while the person is still typing the first search. */
+export async function warmSearch(index: BaseIndex, catalog: MirrorFile[]): Promise<void> {
+  await searchVault('', index, catalog)
 }
 
 export async function searchVault(
@@ -49,10 +58,12 @@ export async function searchVault(
       entries.slice(start, start + BATCH).map(async (entry) => {
         const file = byPath.get(entry.path)
         if (!file) return
+        const { text, folded } = await textOf(file)
         docs.push({
           path: entry.path,
           title: entry.title,
-          text: await textOf(file),
+          text,
+          folded,
           tags: entry.tags,
           aliases: entry.aliases,
         })
@@ -61,5 +72,5 @@ export async function searchVault(
     // Taps keep answering while the vault is read the first time.
     await yieldToScreen()
   }
-  return search(query, docs, 100)
+  return query ? search(query, docs, 100) : []
 }

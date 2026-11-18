@@ -288,7 +288,7 @@ export function NoteView({ id, edit = false, embedded = false, onOpenNote }: Not
     [id],
   )
 
-  const title = name.replace(/\.(md|markdown)$/i, '')
+  const title = name.replace(/\.(md|markdown|base)$/i, '')
   const toggleEditing = useCallback(() => {
     setEditing((on) => !on)
     setNaming(false)
@@ -414,7 +414,7 @@ export function NoteView({ id, edit = false, embedded = false, onOpenNote }: Not
           <ActivityIndicator style={styles.loading} color={colors.textSecondary} />
         ) : (
           <BaseScreen
-            name={title.replace(/\.base$/i, '')}
+            name={title}
             text={text}
             files={baseFiles}
             ready={vault.index.done}
