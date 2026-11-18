@@ -305,7 +305,25 @@ fn hide_instead_of_closing(app: &tauri::AppHandle) {
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
-    let app = tauri::Builder::default()
+    let builder = tauri::Builder::default();
+    // One app at a time. A second one (a double click on a note with the app
+    // already open, which on Windows starts the program again) would run a sync
+    // of its own on the same vault, and the two sent the same new files twice.
+    // It hands its file to the one already open, which comes forward, and ends.
+    // The plugin has to be the first one registered.
+    #[cfg(desktop)]
+    let builder = builder.plugin(tauri_plugin_single_instance::init(|app, argv, _cwd| {
+        let paths = argv
+            .iter()
+            .skip(1)
+            .filter(|argument| !argument.starts_with('-'))
+            .filter(|argument| std::path::Path::new(argument).is_file())
+            .cloned()
+            .collect();
+        queue_opened(app, paths);
+        let _ = panels::show_main(app.clone());
+    }));
+    let app = builder
         .plugin(tauri_plugin_fs::init())
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_dialog::init())
