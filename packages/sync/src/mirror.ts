@@ -177,7 +177,7 @@ export class VaultMirror {
         return await this.options.files.read(file.path)
       } catch {
         // Gone from the device behind the catalog's back (a version before
-        // 0.14.1 deleting a repeated copy took the file with it): the server
+        // 0.15.0 deleting a repeated copy took the file with it): the server
         // still has it.
         file.local = false
       }
