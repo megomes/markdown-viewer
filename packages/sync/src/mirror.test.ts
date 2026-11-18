@@ -48,7 +48,7 @@ describe('VaultMirror', () => {
     const { server, desktop, engine, phone, mirror } = await setup()
     await desktop.setText('a.md', 'oi')
     await engine.syncUntilQuiet()
-    // What a version before 0.14.1 left: the same file sent again under new ids.
+    // What a version before 0.15.0 left: the same file sent again under new ids.
     const other = server.remote('mac')
     await other.commit({
       fileId: 'copia-1',

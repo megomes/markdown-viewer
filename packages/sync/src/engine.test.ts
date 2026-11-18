@@ -307,7 +307,7 @@ describe('vault grande', () => {
     const [mac] = devices
     await mac!.files.write('a.md', text('oi'))
     await settle(devices)
-    // What a version before 0.14.1 left: the same file sent again under new ids.
+    // What a version before 0.15.0 left: the same file sent again under new ids.
     const first = server.log[0]!
     const other = server.remote('mac')
     await other.commit({ fileId: 'copia-1', parent: null, meta: first.meta, deleted: false })

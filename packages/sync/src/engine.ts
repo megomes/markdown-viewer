@@ -484,7 +484,7 @@ export class SyncEngine {
   /* --------------------------------------------------------------- dedupe */
 
   /**
-   * One path, one file. A push that failed halfway in versions before 0.14.1
+   * One path, one file. A push that failed halfway in versions before 0.15.0
    * left lanes sending after the pass ended, and the next pass sent the same
    * new files again under ids of their own: the server ended up with two or
    * three files at one path, all the same content. The copies are deleted on
