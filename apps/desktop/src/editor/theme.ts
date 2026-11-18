@@ -47,6 +47,15 @@ export const editorTheme = EditorView.theme({
   '&.cm-focused .cm-selectionBackground, .cm-selectionBackground, ::selection': {
     background: 'var(--selection)',
   },
+  // The selection on the text itself, over any block background (selection-mark.ts).
+  '.cm-md-selected': { background: 'var(--selection)' },
+  // The other places the selected text appears: a faint hint, never something
+  // that could pass for a second selection.
+  '.cm-selectionMatch': {
+    borderRadius: '2px',
+    background: 'none',
+    boxShadow: 'inset 0 -1px 0 color-mix(in srgb, var(--accent) 55%, transparent)',
+  },
   '.cm-activeLine': { backgroundColor: 'transparent' },
   '.cm-gutters': { display: 'none' },
   '.cm-panels': {
@@ -204,6 +213,38 @@ export const editorTheme = EditorView.theme({
     borderBottomLeftRadius: 'var(--radius-md)',
     borderBottomRightRadius: 'var(--radius-md)',
   },
+
+  // The corner of a code block: the language and the copy button.
+  '.cm-md-code-header': {
+    position: 'absolute',
+    top: 'calc(0.5em + 6px)',
+    right: '28px',
+    display: 'inline-flex',
+    alignItems: 'center',
+    gap: '8px',
+    fontFamily: 'var(--font-ui)',
+    fontSize: '11px',
+    lineHeight: '1',
+    userSelect: 'none',
+  },
+  '.cm-md-code-language': { color: 'var(--text-tertiary)' },
+  '.cm-md-code-copy': {
+    display: 'inline-flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    width: '26px',
+    height: '26px',
+    padding: '0',
+    border: '1px solid var(--border-default)',
+    borderRadius: 'var(--radius-sm)',
+    background: 'var(--surface-1)',
+    color: 'var(--text-secondary)',
+    font: 'inherit',
+    cursor: 'pointer',
+  },
+  '.cm-md-code-copy:hover': { color: 'var(--text-primary)', background: 'var(--surface-hover)' },
+  '.cm-md-code-copy:focus-visible': { outline: '2px solid var(--accent)', outlineOffset: '1px' },
+  '.cm-md-code-copy.is-done': { color: 'var(--accent)' },
 
   '.cm-md-bullet': { color: 'var(--accent)' },
   '.cm-md-task': {

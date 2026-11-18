@@ -60,6 +60,78 @@ class FoldWidget extends WidgetType {
   }
 }
 
+/**
+ * The top right corner of a code block: the language, and a button that copies
+ * the code (without the fences). It stands in for the opening fence while the
+ * cursor is outside the block, and sits beside it while the block is edited.
+ */
+class CodeHeaderWidget extends WidgetType {
+  constructor(
+    private readonly language: string,
+    private readonly code: string,
+  ) {
+    super()
+  }
+  eq(other: CodeHeaderWidget): boolean {
+    return other.language === this.language && other.code === this.code
+  }
+  toDOM(): HTMLElement {
+    const box = document.createElement('span')
+    box.className = 'cm-md-code-header'
+    if (this.language) {
+      const label = document.createElement('span')
+      label.className = 'cm-md-code-language'
+      label.textContent = this.language
+      box.append(label)
+    }
+    const button = document.createElement('button')
+    button.type = 'button'
+    button.className = 'cm-md-code-copy'
+    button.title = 'Copiar o código'
+    button.setAttribute('aria-label', 'Copiar o código')
+    button.innerHTML = COPY_ICON
+    // Pressing the button never moves the cursor into the block.
+    button.addEventListener('mousedown', (event) => {
+      event.preventDefault()
+      event.stopPropagation()
+    })
+    button.addEventListener('click', (event) => {
+      event.preventDefault()
+      event.stopPropagation()
+      void navigator.clipboard.writeText(this.code).then(
+        () => {
+          button.innerHTML = CHECK_ICON
+          button.title = 'Copiado'
+          button.classList.add('is-done')
+          setTimeout(() => {
+            button.innerHTML = COPY_ICON
+            button.title = 'Copiar o código'
+            button.classList.remove('is-done')
+          }, 1500)
+        },
+        () => {
+          button.title = 'Não deu para copiar'
+        },
+      )
+    })
+    box.append(button)
+    return box
+  }
+  ignoreEvent(): boolean {
+    return true
+  }
+}
+
+/** Lucide's `copy` and `check`, drawn in the text colour. */
+const ICON = (paths: string) =>
+  `<svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${paths}</svg>`
+const COPY_ICON = ICON(
+  '<rect width="14" height="14" x="8" y="8" rx="2" ry="2"/><path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2"/>',
+)
+const CHECK_ICON = ICON('<path d="M20 6 9 17l-5-5"/>')
+
+const FENCE = /^\s*(`{3,}|~{3,})/
+
 /** `%% comentário %%` on one line, and the `^id` that names a block. */
 const COMMENT = /%%[^%\n]*?%%/g
 const BLOCK_ID = /\s\^[A-Za-z0-9-]+\s*$/
@@ -201,10 +273,32 @@ function build(view: EditorView): DecorationSet {
             }
             return
           }
-          case 'FencedCode':
           case 'CodeBlock':
             decorateBlock(state, node, visible, 'cm-md-code', out)
             return
+          case 'FencedCode': {
+            decorateBlock(state, node, visible, 'cm-md-code', out)
+            if (drawn.has(node.from)) return false
+            drawn.add(node.from)
+            const info = node.node.getChild('CodeInfo')
+            const body = node.node.getChild('CodeText')
+            const header = new CodeHeaderWidget(
+              info ? state.doc.sliceString(info.from, info.to).trim() : '',
+              body ? state.doc.sliceString(body.from, body.to) : '',
+            )
+            const open = state.doc.lineAt(node.from)
+            const close = state.doc.lineAt(node.to)
+            if (revealed) {
+              // Being edited: the fences are text again, the corner stays.
+              out.push(Decoration.widget({ widget: header, side: 1 }).range(open.to))
+              return false
+            }
+            // Read only: the fences go, the language moves to the corner.
+            out.push(Decoration.replace({ widget: header }).range(open.from, open.to))
+            if (close.number > open.number && FENCE.test(close.text) && close.from < close.to)
+              out.push(hidden.range(close.from, close.to))
+            return false
+          }
           case 'Image':
           case 'Embed': {
             // The markup comes back on the cursor's line like everything else,

@@ -78,9 +78,43 @@ describe('a escrita seamless', () => {
     expect(visivel).not.toContain('https://exemplo.com')
   })
 
-  it('deixa a cerca do bloco de código à vista', () => {
-    const doc = '```ts\nconst a = 1\n```\n\ndepois'
-    expect(withCursor(doc, 24)).toContain('```')
+  it('esconde as cercas do bloco de código e põe a linguagem no canto', () => {
+    const doc = '```bash\nnode x.mjs\n```\n\ndepois'
+    const view = open(doc, doc.length)
+    expect(shown(view)).not.toContain('```')
+    expect(view.contentDOM.querySelector('.cm-md-code-language')?.textContent).toBe('bash')
+    expect(view.contentDOM.querySelector('.cm-md-code-copy')).not.toBeNull()
+    view.destroy()
+  })
+
+  it('mostra as cercas quando o cursor entra no bloco, e o botão de copiar fica', () => {
+    const doc = '```bash\nnode x.mjs\n```\n\ndepois'
+    const view = open(doc, 10)
+    expect(shown(view)).toContain('```bash')
+    expect(view.contentDOM.querySelector('.cm-md-code-copy')).not.toBeNull()
+    view.destroy()
+  })
+
+  it('copia só o código, sem as cercas', async () => {
+    const doc = '```bash\nnode x.mjs\nnode y.mjs\n```\n\ndepois'
+    const view = open(doc, doc.length)
+    let copied = ''
+    Object.defineProperty(navigator, 'clipboard', {
+      configurable: true,
+      value: { writeText: async (text: string) => void (copied = text) },
+    })
+    view.contentDOM.querySelector<HTMLButtonElement>('.cm-md-code-copy')!.click()
+    await Promise.resolve()
+    expect(copied).toBe('node x.mjs\nnode y.mjs')
+    view.destroy()
+  })
+
+  it('pinta a seleção no próprio texto, por cima do fundo do bloco', () => {
+    const doc = '```bash\nSim.getPause()\n```\n'
+    const view = open(doc, 8)
+    view.dispatch({ selection: EditorSelection.single(8, 15) })
+    expect(view.contentDOM.querySelector('.cm-md-selected')?.textContent).toBe('Sim.get')
+    view.destroy()
   })
 
   it('nunca muda o documento, só o desenho', () => {

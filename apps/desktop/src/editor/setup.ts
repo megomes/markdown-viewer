@@ -18,6 +18,7 @@ import { dialect } from '@markdown-viewer/core/dialect'
 import { documentSource } from './images'
 import { frontmatterBlock } from './frontmatter'
 import { seamlessMarkdown } from './seamless'
+import { selectionMark } from './selection-mark'
 import { blockWidgets } from './blocks'
 import { linkClicks, linkStyles } from './links'
 import { tableBlocks } from './tables'
@@ -99,6 +100,7 @@ export function editorExtensions({
           tableBlocks,
           blockWidgets,
           seamlessMarkdown,
+          selectionMark,
           linkStyles,
           linkClicks,
         ]),
